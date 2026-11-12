@@ -1,0 +1,13 @@
+[package]
+name = "omen-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "omen"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true

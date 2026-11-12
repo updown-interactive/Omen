@@ -1,0 +1,9 @@
+[package]
+name = "hello-world"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+omen-gpui = { path = "../../crates/omen-gpui" }

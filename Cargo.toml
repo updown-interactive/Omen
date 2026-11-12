@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = ["crates/omen-core", "crates/omen-macros", "crates/omen-ui", "crates/omen-gpui", "crates/omen-cli", "examples/hello-world"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/updown-interactive/Omen"
+
+[workspace.dependencies]
+thiserror = "2"
+syn = { version = "2", features = ["full"] }
+quote = "1"
+proc-macro2 = "1"
+clap = { version = "4", features = ["derive"] }
+gpui = { git = "https://github.com/zed-industries/zed", rev = "faf8f0b6980205ca2659af174790a212ae3c416a" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "faf8f0b6980205ca2659af174790a212ae3c416a", features = ["font-kit", "wayland", "x11", "runtime_shaders"] }

@@ -1,0 +1,36 @@
+name: Omen CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential clang cmake libwayland-dev libxkbcommon-dev \
+            libxkbcommon-x11-dev libx11-dev libxi-dev libxcursor-dev \
+            libxrandr-dev libxinerama-dev libfontconfig1-dev libfreetype-dev \
+            libvulkan-dev libasound2-dev libssl-dev libx11-xcb-dev pkg-config
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Check compilation
+        run: cargo check --workspace --locked
+      - name: Run tests
+        run: cargo test --workspace --locked
+      - name: Run Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
