@@ -138,6 +138,32 @@ impl WorkspaceState {
             .filter(|document| document.dirty())
             .count()
     }
+
+    pub fn project_platforms(&self) -> Option<Vec<omen_cli::project::manifest::TargetPlatform>> {
+        let root = self.root.as_ref()?;
+        let manifest_path = root.join("Omen.toml");
+        let content = if let Some(doc) = self.documents.iter().find(|d| d.path == manifest_path) {
+            doc.content.to_string()
+        } else {
+            std::fs::read_to_string(&manifest_path).ok()?
+        };
+        #[derive(serde::Deserialize)]
+        struct ManifestPlatforms {
+            targets: Option<TargetsPlatforms>,
+        }
+        #[derive(serde::Deserialize)]
+        struct TargetsPlatforms {
+            #[serde(default)]
+            platforms: Vec<omen_cli::project::manifest::TargetPlatform>,
+        }
+        let parsed: ManifestPlatforms = toml::from_str(&content).ok()?;
+        Some(
+            parsed
+                .targets
+                .map(|t| t.platforms)
+                .unwrap_or_else(|| omen_cli::project::manifest::TargetPlatform::ALL.to_vec()),
+        )
+    }
 }
 
 omen::state! {

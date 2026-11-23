@@ -149,6 +149,98 @@ impl Profile {
             Self::Custom => (600, 500),
         }
     }
+
+    pub fn is_mobile(self) -> bool {
+        matches!(
+            self,
+            Self::Android | Self::AndroidTablet | Self::IPhone | Self::IPad
+        )
+    }
+
+    pub fn is_web(self) -> bool {
+        matches!(
+            self,
+            Self::WebMobile | Self::WebTablet | Self::WebDesktop
+        )
+    }
+
+    pub fn is_desktop(self) -> bool {
+        matches!(
+            self,
+            Self::Mac | Self::Windows | Self::Linux
+        )
+    }
+
+    pub fn default_desktop() -> Self {
+        if cfg!(target_os = "macos") {
+            Self::Mac
+        } else if cfg!(target_os = "windows") {
+            Self::Windows
+        } else {
+            Self::Linux
+        }
+    }
+
+    /// Resolves the default design frame profile aware of the project's supported target platforms.
+    ///
+    /// Priority order:
+    /// 1. Mobile (first priority)
+    /// 2. Web (second priority)
+    /// 3. Desktop (third priority)
+    pub fn resolve_default(
+        platforms: &[omen_cli::project::manifest::TargetPlatform],
+        preferred: Option<Self>,
+    ) -> Self {
+        use omen_cli::project::manifest::TargetPlatform;
+
+        if platforms.is_empty() {
+            return preferred.unwrap_or(Self::IPhone);
+        }
+
+        let supports_ios = platforms.contains(&TargetPlatform::Ios);
+        let supports_android = platforms.contains(&TargetPlatform::Android);
+        let supports_mobile = supports_ios || supports_android;
+        let supports_web = platforms.contains(&TargetPlatform::Web);
+        let supports_desktop = platforms.contains(&TargetPlatform::Desktop);
+
+        // Priority 1: Mobile
+        if supports_mobile {
+            if let Some(pref) = preferred {
+                if (supports_ios && matches!(pref, Self::IPhone | Self::IPad))
+                    || (supports_android && matches!(pref, Self::Android | Self::AndroidTablet))
+                {
+                    return pref;
+                }
+            }
+            return if supports_ios {
+                Self::IPhone
+            } else {
+                Self::Android
+            };
+        }
+
+        // Priority 2: Web
+        if supports_web {
+            if let Some(pref) = preferred {
+                if pref.is_web() {
+                    return pref;
+                }
+            }
+            return Self::WebDesktop;
+        }
+
+        // Priority 3: Desktop
+        if supports_desktop {
+            if let Some(pref) = preferred {
+                if pref.is_desktop() {
+                    return pref;
+                }
+            }
+            return Self::default_desktop();
+        }
+
+        preferred.unwrap_or(Self::IPhone)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -826,5 +918,62 @@ impl Component {
             Self::Gap => "Gap(8)",
             Self::Scroll => "Layout {}.scrollable()",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use omen_cli::project::manifest::TargetPlatform;
+
+    #[test]
+    fn resolve_default_prefers_browser_frame_when_only_web_is_supported() {
+        let platforms = vec![TargetPlatform::Web];
+        assert_eq!(
+            Profile::resolve_default(&platforms, Some(Profile::IPhone)),
+            Profile::WebDesktop
+        );
+    }
+
+    #[test]
+    fn resolve_default_follows_platform_priorities() {
+        // Mobile (first) > Web (second) > Desktop (third)
+        let all = vec![
+            TargetPlatform::Desktop,
+            TargetPlatform::Android,
+            TargetPlatform::Ios,
+            TargetPlatform::Web,
+        ];
+        assert_eq!(
+            Profile::resolve_default(&all, Some(Profile::WebDesktop)),
+            Profile::IPhone
+        );
+
+        // Android only for mobile
+        let android_and_web = vec![TargetPlatform::Android, TargetPlatform::Web];
+        assert_eq!(
+            Profile::resolve_default(&android_and_web, Some(Profile::IPhone)),
+            Profile::Android
+        );
+
+        // Web + Desktop -> Web wins over Desktop
+        let web_and_desktop = vec![TargetPlatform::Desktop, TargetPlatform::Web];
+        assert_eq!(
+            Profile::resolve_default(&web_and_desktop, Some(Profile::IPhone)),
+            Profile::WebDesktop
+        );
+
+        // Desktop only -> Desktop wins
+        let desktop_only = vec![TargetPlatform::Desktop];
+        assert_eq!(
+            Profile::resolve_default(&desktop_only, Some(Profile::IPhone)),
+            Profile::default_desktop()
+        );
+
+        // Empty platforms -> preferred fallback
+        assert_eq!(
+            Profile::resolve_default(&[], Some(Profile::WebDesktop)),
+            Profile::WebDesktop
+        );
     }
 }

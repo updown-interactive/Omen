@@ -861,9 +861,16 @@ fn render_leaf(
                 input.code_document = style.code_document.clone();
                 input.accent = rgb(settings.tokens.accent).into();
                 input.background = bg_color;
-                if style.autofocus && !field_inert && !input.autofocus_applied {
-                    input.focus_handle.focus(window, cx);
-                    input.autofocus_applied = true;
+                if !field_inert {
+                    if let Some(request) = &style.focus_request
+                        && request.get()
+                    {
+                        input.focus_handle.focus(window, cx);
+                        request.set(false);
+                    } else if style.autofocus && !input.autofocus_applied {
+                        input.focus_handle.focus(window, cx);
+                        input.autofocus_applied = true;
+                    }
                 }
             });
             let field_focus = input.read(cx).focus_handle.clone();
@@ -1284,10 +1291,15 @@ fn finish_node(
     if style.focus_scope && !settings.inert {
         element = element.tab_group();
     }
-    let wants_focus = activation.is_some()
-        || style.focusable
-        || style.focus_request.is_some()
-        || style.focus_scope;
+    let is_text_input = matches!(
+        node.kind,
+        ViewKind::TextField { .. } | ViewKind::SecureField { .. }
+    );
+    let wants_focus = !is_text_input
+        && (activation.is_some()
+            || style.focusable
+            || style.focus_request.is_some()
+            || style.focus_scope);
     if settings.inert {
         activation = None;
     }

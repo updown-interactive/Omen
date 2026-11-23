@@ -74,6 +74,7 @@ environment! {
         @Reactive library_message: String = String::new();
         pub(self) library_target: Rc<RefCell<Option<(PathBuf, u64, usize)>>> = Rc::default();
         @Reactive find_visible: bool = false;
+        @Reactive find_focus: bool = false;
         @Reactive find_text: String = String::new();
         @Reactive replacement_text: String = String::new();
         @Reactive rename_visible: bool = false;

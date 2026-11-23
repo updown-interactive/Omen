@@ -103,7 +103,7 @@ impl StudioEnvironment {
                 return;
             }
             EditorEvent::Find => {
-                self.find_visible.set(true);
+                self.open_find();
                 return;
             }
             EditorEvent::Rename => {
@@ -391,6 +391,22 @@ impl StudioEnvironment {
             state.completions = Arc::default();
         });
         self.editor_event(&path, EditorEvent::Edited);
+    }
+    pub fn open_find(&self) {
+        self.find_visible.set(true);
+        self.find_focus.set(true);
+        if let Some(path) = self.workspace.get().active_file {
+            let model = self.editor_states.borrow().get(&path).cloned();
+            if let Some(model) = model {
+                let state = model.get();
+                if !state.selection.is_empty() {
+                    let selected = state.text.slice(state.selection.clone());
+                    if !selected.is_empty() && !selected.contains('\n') && selected.len() <= 100 {
+                        self.find_text.set(selected.to_string());
+                    }
+                }
+            }
+        }
     }
     pub async fn find_next(&self) {
         let needle = self.find_text.get();

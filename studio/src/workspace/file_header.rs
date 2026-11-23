@@ -1,5 +1,6 @@
 //! Format-aware headers for newly authored project files.
-use chrono::{SecondsFormat, Utc};
+use chrono::Utc;
+use omen::format::{DateTimeOptions, FormatContext, Instant, format};
 use std::{fs, path::Path};
 
 pub(super) struct FileHeader {
@@ -10,15 +11,30 @@ pub(super) struct FileHeader {
 
 impl FileHeader {
     pub(super) fn new(app: &str, author: &str) -> Self {
+        Self::with_context(app, author, &FormatContext::default())
+    }
+
+    pub(super) fn with_context(app: &str, author: &str, context: &FormatContext) -> Self {
+        let now = Utc::now();
+        let instant = Instant::from_epoch_seconds(now.timestamp());
+        let options = DateTimeOptions::long();
+        let created_at = format::instant(instant, &options, context)
+            .unwrap_or_else(|_| now.to_rfc3339());
+
         Self {
             app: single_line(app),
-            created_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+            created_at,
             author: single_line(if author.trim().is_empty() {
                 "Unknown"
             } else {
                 author
             }),
         }
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn created_at(&self) -> &str {
+        &self.created_at
     }
 
     pub(super) fn add(&self, path: &Path, source: &str) -> String {

@@ -3951,6 +3951,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "omen-format"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "intl_pluralrules",
+ "serde",
+ "thiserror 2.0.21",
+ "unic-langid",
+ "unicode-segmentation",
+]
+
+[[package]]
 name = "omen-gpui"
 version = "0.1.0"
 dependencies = [
@@ -4056,6 +4068,7 @@ version = "0.1.0"
 dependencies = [
  "futures",
  "omen-core",
+ "omen-format",
  "omen-gpui",
  "omen-macros",
  "omen-plugin",

@@ -1,9 +1,14 @@
-use futures::{StreamExt, executor::block_on};
+use futures::{
+    StreamExt,
+    executor::{LocalPool, block_on},
+    task::LocalSpawnExt,
+};
 use omen_studio::{
     app::StudioEnvironment,
     services,
     state::WorkspaceState,
     theme::LayoutPreferences,
+    visual::Profile,
     workspace::{
         Command, Workspace,
         service::{Event, WorkspaceService},
@@ -1715,6 +1720,35 @@ fn persistent_editor_find_replace_and_restart_preserve_text() {
 }
 
 #[test]
+fn open_find_auto_focuses_and_prepopulates_selection() {
+    let fixture = Fixture::new();
+    let profile = fixture.0.join("find-focus-profile");
+    let app = StudioEnvironment::at(profile);
+    app.send(Command::OpenProject(fixture.project()));
+    app.send(Command::OpenFile(fixture.file()));
+    app.flush();
+
+    let mut pool = futures::executor::LocalPool::new();
+    use futures::task::LocalSpawnExt;
+    pool.spawner().spawn_local(app.receive()).unwrap();
+    pool.run_until_stalled();
+
+    let document = app.editor_document(fixture.file());
+    document.state.update(|state| {
+        state.selection = 0..4; // "fn m"
+    });
+
+    assert!(!app.find_visible.get());
+    assert!(!app.find_focus.get());
+
+    app.open_find();
+
+    assert!(app.find_visible.get());
+    assert!(app.find_focus.get());
+    assert_eq!(app.find_text.get(), "fn m");
+}
+
+#[test]
 fn language_workspace_edits_are_staged_version_checked_and_confined_to_project() {
     use omen_studio::editor::lsp::protocol;
     let fixture = Fixture::new();
@@ -2291,7 +2325,8 @@ fn studio_creation_adds_account_headers_to_starters_and_new_files() {
             .lines()
             .find_map(|line| line.strip_prefix(&format!("{prefix}Created at: ")))
             .unwrap();
-        assert!(chrono::DateTime::parse_from_rfc3339(created_at).is_ok());
+        assert!(!created_at.is_empty());
+        assert!(created_at.contains("UTC"));
         assert!(!text.contains("ada@example.test"));
     }
     assert!(
@@ -2309,4 +2344,84 @@ fn studio_creation_adds_account_headers_to_starters_and_new_files() {
         toml::from_str::<toml::Value>(&toml).unwrap()["package"]["name"].as_str(),
         Some("example")
     );
+}
+
+#[test]
+fn design_frame_aware_of_project_context_and_platform_priorities() {
+    let fixture = Fixture::new();
+    let root = fixture.project();
+    let view = root.join("src/home_view.rs");
+    fs::write(&view, "view! { Home { Text(\"Home\") } }").unwrap();
+
+    let write_manifest = |platforms: Vec<omen_cli::project::manifest::TargetPlatform>| {
+        let mut manifest = omen_cli::project::template::default_manifest("test-app", None);
+        manifest.targets.platforms = platforms;
+        fs::write(root.join("Omen.toml"), toml::to_string(&manifest).unwrap()).unwrap();
+    };
+
+    use omen_cli::project::manifest::TargetPlatform;
+
+    // 1. When the project only supports web, the default frame is the browser frame (Profile::WebDesktop)
+    write_manifest(vec![TargetPlatform::Web]);
+
+    let app = StudioEnvironment::at(fixture.0.join("profile"));
+    let mut pool = LocalPool::new();
+    pool.spawner().spawn_local(app.receive()).unwrap();
+    app.send(Command::OpenProject(root.clone()));
+    app.send(Command::OpenFile(view.clone()));
+    app.flush();
+    pool.run_until_stalled();
+
+    let canvas = app.canvas_settings(&view);
+    assert_eq!(canvas.frames[0].profile, Profile::WebDesktop);
+
+    // 2. When multiple platforms are supported: mobile first priority, web second, desktop third
+    // Web + Desktop -> Web wins
+    write_manifest(vec![TargetPlatform::Desktop, TargetPlatform::Web]);
+    let dashboard = root.join("src/dashboard_view.rs");
+    fs::write(&dashboard, "view! { Dashboard { Text(\"Dashboard\") } }").unwrap();
+    app.send(Command::OpenFile(dashboard.clone()));
+    app.flush();
+    pool.run_until_stalled();
+    let canvas_dashboard = app.canvas_settings(&dashboard);
+    assert_eq!(canvas_dashboard.frames[0].profile, Profile::WebDesktop);
+
+    // Mobile (Android) + Web + Desktop -> Mobile (Android) wins
+    write_manifest(vec![
+        TargetPlatform::Desktop,
+        TargetPlatform::Android,
+        TargetPlatform::Web,
+    ]);
+    let settings_view = root.join("src/settings_view.rs");
+    fs::write(&settings_view, "view! { Settings { Text(\"Settings\") } }").unwrap();
+    app.send(Command::OpenFile(settings_view.clone()));
+    app.flush();
+    pool.run_until_stalled();
+    let canvas_settings = app.canvas_settings(&settings_view);
+    assert_eq!(canvas_settings.frames[0].profile, Profile::Android);
+
+    // Mobile (iOS + Android) + Web + Desktop -> Mobile (iPhone) wins
+    write_manifest(vec![
+        TargetPlatform::Desktop,
+        TargetPlatform::Android,
+        TargetPlatform::Ios,
+        TargetPlatform::Web,
+    ]);
+    let profile_view = root.join("src/profile_view.rs");
+    fs::write(&profile_view, "view! { Profile { Text(\"Profile\") } }").unwrap();
+    app.send(Command::OpenFile(profile_view.clone()));
+    app.flush();
+    pool.run_until_stalled();
+    let canvas_profile = app.canvas_settings(&profile_view);
+    assert_eq!(canvas_profile.frames[0].profile, Profile::IPhone);
+
+    // Desktop only -> Desktop wins
+    write_manifest(vec![TargetPlatform::Desktop]);
+    let admin_view = root.join("src/admin_view.rs");
+    fs::write(&admin_view, "view! { Admin { Text(\"Admin\") } }").unwrap();
+    app.send(Command::OpenFile(admin_view.clone()));
+    app.flush();
+    pool.run_until_stalled();
+    let canvas_admin = app.canvas_settings(&admin_view);
+    assert_eq!(canvas_admin.frames[0].profile, Profile::default_desktop());
 }

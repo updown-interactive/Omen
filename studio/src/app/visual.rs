@@ -1,7 +1,7 @@
 //! Visual editor commands use the same document and persistent workspace worker.
 use super::StudioEnvironment;
 use crate::{
-    visual::{CanvasSettings, ComponentEdit, EditorMode, PreviewResult, VisualTree},
+    visual::{CanvasSettings, ComponentEdit, EditorMode, PreviewResult, Profile, VisualTree},
     workspace::Command,
 };
 use omen::{Binding, EditorEvent, EditorState, PreviewGesture, TextSnapshot};
@@ -42,6 +42,12 @@ pub(super) struct History {
 }
 
 impl StudioEnvironment {
+    pub fn default_frame_profile(&self) -> Profile {
+        let preferred = self.settings.read(|settings| settings.design.frame_profile);
+        let platforms = self.workspace.read(|workspace| workspace.project_platforms());
+        Profile::resolve_default(platforms.as_deref().unwrap_or(&[]), Some(preferred))
+    }
+
     pub fn canvas_settings(&self, path: &Path) -> CanvasSettings {
         if let Some((active, settings)) = self.canvas_motion.get()
             && active == path
@@ -51,8 +57,9 @@ impl StudioEnvironment {
         self.workspace
             .read(|workspace| workspace.canvas(path).cloned())
             .unwrap_or_else(|| {
+                let profile = self.default_frame_profile();
                 self.settings.read(|settings| {
-                    CanvasSettings::new(settings.design.initial_mode, settings.design.frame_profile)
+                    CanvasSettings::new(settings.design.initial_mode, profile)
                 })
             })
     }

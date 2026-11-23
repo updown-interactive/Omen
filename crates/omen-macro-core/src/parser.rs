@@ -260,6 +260,115 @@ impl Parse for ModifierArg {
                         expanded,
                     }));
                 }
+                if matches!(
+                    symbol.to_string().as_str(),
+                    "currency"
+                        | "number"
+                        | "percent"
+                        | "date"
+                        | "time"
+                        | "datetime"
+                        | "relative"
+                        | "duration"
+                        | "measurement"
+                        | "bytes"
+                        | "data_rate"
+                        | "text"
+                        | "list"
+                        | "phone"
+                        | "address"
+                ) {
+                    let tokens: proc_macro2::TokenStream = duration.parse()?;
+                    let method = syn::Ident::new(&symbol.to_string(), symbol.span());
+                    let token_str = tokens.to_string().replace(' ', "");
+                    let mut expr: syn::Expr = match symbol.to_string().as_str() {
+                        "date" => match token_str.as_str() {
+                            ".short" => syn::parse_quote!(::omen_ui::format::FormatOption::date(::omen_ui::format::DateStyle::Short)),
+                            ".medium" => syn::parse_quote!(::omen_ui::format::FormatOption::date(::omen_ui::format::DateStyle::Medium)),
+                            ".long" => syn::parse_quote!(::omen_ui::format::FormatOption::date(::omen_ui::format::DateStyle::Long)),
+                            ".full" => syn::parse_quote!(::omen_ui::format::FormatOption::date(::omen_ui::format::DateStyle::Full)),
+                            _ if tokens.is_empty() => syn::parse_quote!(::omen_ui::format::FormatOption::date(::omen_ui::format::DateStyle::Medium)),
+                            _ => syn::parse_quote!(::omen_ui::format::FormatOption::date(#tokens)),
+                        },
+                        "datetime" => match token_str.as_str() {
+                            ".short" => syn::parse_quote!(::omen_ui::format::FormatOption::datetime(::omen_ui::format::DateStyle::Short)),
+                            ".medium" => syn::parse_quote!(::omen_ui::format::FormatOption::datetime(::omen_ui::format::DateStyle::Medium)),
+                            ".long" => syn::parse_quote!(::omen_ui::format::FormatOption::datetime(::omen_ui::format::DateStyle::Long)),
+                            ".full" => syn::parse_quote!(::omen_ui::format::FormatOption::datetime(::omen_ui::format::DateStyle::Full)),
+                            _ if tokens.is_empty() => syn::parse_quote!(::omen_ui::format::FormatOption::datetime(::omen_ui::format::DateStyle::Medium)),
+                            _ => syn::parse_quote!(::omen_ui::format::FormatOption::datetime(#tokens)),
+                        },
+                        "number" => match token_str.as_str() {
+                            ".compact" => syn::parse_quote!(::omen_ui::format::FormatOption::number_compact()),
+                            _ if tokens.is_empty() => syn::parse_quote!(::omen_ui::format::FormatOption::number()),
+                            _ => syn::parse_quote!(::omen_ui::format::FormatOption::number(#tokens)),
+                        },
+                        "percent" => match token_str.as_str() {
+                            ".whole" => syn::parse_quote!(::omen_ui::format::FormatOption::percent_whole()),
+                            _ if tokens.is_empty() => syn::parse_quote!(::omen_ui::format::FormatOption::percent()),
+                            _ => syn::parse_quote!(::omen_ui::format::FormatOption::percent(#tokens)),
+                        },
+                        "relative" => match token_str.as_str() {
+                            ".numeric" => syn::parse_quote!(::omen_ui::format::FormatOption::relative_numeric()),
+                            _ if tokens.is_empty() => syn::parse_quote!(::omen_ui::format::FormatOption::relative()),
+                            _ => syn::parse_quote!(::omen_ui::format::FormatOption::relative(#tokens)),
+                        },
+                        "duration" => match token_str.as_str() {
+                            ".clock" => syn::parse_quote!(::omen_ui::format::FormatOption::duration(::omen_ui::format::DurationStyle::Clock)),
+                            ".human" => syn::parse_quote!(::omen_ui::format::FormatOption::duration(::omen_ui::format::DurationStyle::Human)),
+                            ".short" => syn::parse_quote!(::omen_ui::format::FormatOption::duration(::omen_ui::format::DurationStyle::Short)),
+                            ".narrow" => syn::parse_quote!(::omen_ui::format::FormatOption::duration(::omen_ui::format::DurationStyle::Narrow)),
+                            _ => syn::parse_quote!(::omen_ui::format::FormatOption::duration(#tokens)),
+                        },
+                        "bytes" => match token_str.as_str() {
+                            ".binary" => syn::parse_quote!(::omen_ui::format::FormatOption::bytes(::omen_ui::format::ByteStandard::Binary)),
+                            ".decimal" => syn::parse_quote!(::omen_ui::format::FormatOption::bytes(::omen_ui::format::ByteStandard::Decimal)),
+                            _ => syn::parse_quote!(::omen_ui::format::FormatOption::bytes(#tokens)),
+                        },
+                        "measurement" => {
+                            let unit_expr = match token_str.as_str() {
+                                ".kilometer" | ".kilometers" => quote::quote!(::omen_ui::format::Unit::Kilometer),
+                                ".meter" | ".meters" => quote::quote!(::omen_ui::format::Unit::Meter),
+                                ".centimeter" | ".centimeters" => quote::quote!(::omen_ui::format::Unit::Centimeter),
+                                ".millimeter" | ".millimeters" => quote::quote!(::omen_ui::format::Unit::Millimeter),
+                                ".mile" | ".miles" => quote::quote!(::omen_ui::format::Unit::Mile),
+                                ".yard" | ".yards" => quote::quote!(::omen_ui::format::Unit::Yard),
+                                ".foot" | ".feet" => quote::quote!(::omen_ui::format::Unit::Foot),
+                                ".inch" | ".inches" => quote::quote!(::omen_ui::format::Unit::Inch),
+                                ".kilogram" | ".kilograms" => quote::quote!(::omen_ui::format::Unit::Kilogram),
+                                ".gram" | ".grams" => quote::quote!(::omen_ui::format::Unit::Gram),
+                                ".pound" | ".pounds" => quote::quote!(::omen_ui::format::Unit::Pound),
+                                ".ounce" | ".ounces" => quote::quote!(::omen_ui::format::Unit::Ounce),
+                                ".celsius" => quote::quote!(::omen_ui::format::Unit::Celsius),
+                                ".fahrenheit" => quote::quote!(::omen_ui::format::Unit::Fahrenheit),
+                                ".kelvin" => quote::quote!(::omen_ui::format::Unit::Kelvin),
+                                _ => tokens.clone(),
+                            };
+                            syn::parse_quote!(::omen_ui::format::FormatOption::measurement(#unit_expr))
+                        }
+                        _ => {
+                            if tokens.is_empty() {
+                                syn::parse_quote!(::omen_ui::format::FormatOption::#method())
+                            } else {
+                                syn::parse_quote!(::omen_ui::format::FormatOption::#method(#tokens))
+                            }
+                        }
+                    };
+
+                    while input.peek(Token![.]) && !input.peek(Token![..]) {
+                        input.parse::<Token![.]>()?;
+                        let chain_ident: syn::Ident = input.parse()?;
+                        if input.peek(token::Paren) {
+                            let chain_group;
+                            syn::parenthesized!(chain_group in input);
+                            let chain_tokens: proc_macro2::TokenStream = chain_group.parse()?;
+                            expr = syn::parse_quote!(#expr.#chain_ident(#chain_tokens));
+                        } else {
+                            expr = syn::parse_quote!(#expr.#chain_ident());
+                        }
+                    }
+                    return Ok(Self::Rust(expr));
+                }
                 let tokens: proc_macro2::TokenStream = duration.parse()?;
                 let value = tokens.to_string().replace(' ', "");
                 let millis = if let Some(value) = value.strip_suffix(".ms") {

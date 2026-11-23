@@ -8,6 +8,7 @@ publish = false
 [dependencies]
 omen-plugin = { path = "../omen-plugin" }
 omen-core = { path = "../omen-core" }
+omen-format = { path = "../omen-format" }
 omen-macros = { path = "../omen-macros" }
 omen-web = { path = "../omen-web", optional = true }
 

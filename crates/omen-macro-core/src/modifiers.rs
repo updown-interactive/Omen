@@ -117,6 +117,8 @@ macro_rules! modifier_specs {
 }
 
 modifier_specs! {
+        "format" => ("format", None, 1),
+        "format_context" | "formatContext" => ("format_context", None, 1),
         "context_menu" | "contextMenu" => ("context_menu", None, 2),
         "hoverBackground" => ("hover_background", Some(("Color", COLORS)), 1),
         "desktopAction" => ("desktop_action", None, 1),
@@ -414,6 +416,10 @@ pub(crate) fn generate(modifier: &ModifierNode, component: &str) -> syn::Result<
             ModifierArg::Symbol(symbol) => {
                 if name == "frame" && symbol == "infinity" {
                     return Ok(quote!(::core::f64::INFINITY));
+                }
+                if name == "format" {
+                    let method = syn::Ident::new(&symbol.to_string(), symbol.span());
+                    return Ok(quote_spanned!(symbol.span()=> ::omen_ui::format::FormatOption::#method()));
                 }
                 let domain = if name == "gradient" && index == 2 {
                     None

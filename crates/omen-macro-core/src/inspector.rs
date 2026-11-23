@@ -267,6 +267,15 @@ pub const MODIFIERS: &[ModifierDescriptor] = &[
         components: &["Text", "TextEditor", "TextField", "Button"],
     },
     ModifierDescriptor {
+        name: "format",
+        label: "Format",
+        category: "Typography",
+        default: ".number()",
+        string: false,
+        flag: false,
+        components: &["Text"],
+    },
+    ModifierDescriptor {
         name: "color",
         label: "Text color",
         category: "Appearance",

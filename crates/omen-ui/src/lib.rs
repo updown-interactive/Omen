@@ -16,6 +16,19 @@ extern crate self as omen_ui;
 pub use omen_core::*;
 pub use omen_macros::{environment, locale, main, state, view};
 
+pub use omen_format as format;
+pub use omen_format::{
+    AddressOptions, ByteOptions, ByteStandard, CalendarId, CurrencyCode, CurrencyDisplay,
+    CurrencyOptions, CurrencySign, DataRateOptions, DataRateUnit, DateOptions, DateStyle,
+    DateTimeOptions, Decimal, DurationOptions, DurationStyle, FormatContext, FormatError,
+    FormatOption, Formatter, FormatterDescriptor, HourCycle, Instant, ListOptions, ListStyle,
+    ListType, LocaleId, Measurement, MeasurementOptions, MeasurementSystem, Money, NumberOptions,
+    NumberingSystem, PercentOptions, PercentScale, PhoneFormat, PhoneNumber, PhoneOptions,
+    PlainDate, PlainDateTime, PlainTime, PostalAddress, RelativeOptions, RelativeStyle,
+    RoundingMode, TextOptions, TextTransform, TimeOptions, TimeStyle, TimeZoneId, Unit, UnitWidth,
+    ZoneOffset, ZonedDateTime,
+};
+
 /// Backend entry points used only by generated application code.
 #[doc(hidden)]
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
@@ -723,6 +736,45 @@ pub trait ViewExt: View + Sized {
                 .unwrap_or_default()
                 .with(value.into_environment()),
         );
+        AnyView(node)
+    }
+    /// Override the formatting context for this view subtree.
+    fn format_context(self, context: impl Into<omen_format::FormatContext>) -> AnyView {
+        self.environment(omen_core::Value::new(context.into()))
+    }
+    /// Format text content according to the active formatting context and options.
+    fn format(self, option: impl Into<omen_format::FormatOption>) -> AnyView {
+        let base = self.into_node();
+        let option = option.into();
+        let fallback_locale = base.style.locale.clone();
+        let base_style = base.style.clone();
+        let mut node = ViewNode::new(ViewKind::Reactive(ReactiveView::new(
+            "omen::FormattedText",
+            move |scope| {
+                let context = if let Ok(ctx_val) = scope.environment::<omen_format::FormatContext>() {
+                    ctx_val.get()
+                } else if let Ok(loc_val) = scope.environment::<Locale>() {
+                    let loc = loc_val.get();
+                    omen_format::FormatContext::new(omen_format::LocaleId::new(&loc.id))
+                } else if let Some(ref loc) = fallback_locale {
+                    omen_format::FormatContext::new(omen_format::LocaleId::new(&loc.id))
+                } else {
+                    omen_format::FormatContext::default()
+                };
+
+                let mut result_node = base.clone();
+                match &base.kind {
+                    ViewKind::Text(raw) => {
+                        let formatted = omen_format::format::format_dynamic(raw, &option, &context)
+                            .unwrap_or_else(|_| raw.clone());
+                        result_node.kind = ViewKind::Text(formatted);
+                    }
+                    _ => {}
+                }
+                Ok(result_node)
+            },
+        )));
+        node.style = base_style;
         AnyView(node)
     }
     /// Run when the view mounts or reappears.

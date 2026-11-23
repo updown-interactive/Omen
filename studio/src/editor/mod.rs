@@ -139,7 +139,7 @@ view! {
                     .frame(.infinity, .infinity)
                     .key(path.display().to_string())
                     .accessibilityHint("Rust code editor with line numbers. Control Space completes, F12 goes to definition. Standard selection, clipboard and undo shortcuts are supported.")
-                    .shortcut(if cfg!(target_os="macos") {"cmd-f"} else {"ctrl-f"}, move || app.find_visible = true)
+                    .shortcut(if cfg!(target_os="macos") {"cmd-f"} else {"ctrl-f"}, move || app.open_find())
                     .shortcut(if cfg!(target_os="macos") {"cmd-l"} else {"ctrl-l"}, move || app.open_component_library())
                 Text(format!("Ln {}, Col {} · {}", cursor_line+1, cursor_column+1, format!("{}{} diagnostics · {}", if editing.secondary_selections.is_empty() {String::new()} else {format!("{} cursors · ",editing.secondary_selections.len()+1)}, editing.diagnostics.len(), app.language_status)))
                     .font(.caption)

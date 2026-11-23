@@ -13,6 +13,7 @@ members = [
     "crates/omen-macros",
     "crates/omen-macro-core",
     "crates/omen-ui",
+    "crates/omen-format",
     "crates/omen-gpui",
     "crates/omen-cli",
     "crates/omen-components",

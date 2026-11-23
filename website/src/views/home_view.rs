@@ -1,6 +1,6 @@
 // File name: home_view.rs
 // App name: website
-// Created at: 2026-11-23T02:52:59Z
+// Created at: 2026-11-23T03:20:17Z
 // Created by: Siva
 
 use omen::prelude::*;
@@ -9,19 +9,7 @@ view! {
     @Design
     pub Home {
         Layout {
-            Text("Hello, Omen!")
-                .font(.largeTitle)
-                .weight(.bold)
-
-            Button("Get Started") {
-                println!("Welcome to Omen!");
-            }
-            .padding(16)
-            .background(.blue)
-            .color(.white)
+            Text("Home")
         }
-        .spacing(.lg)
-        .padding(.xl)
-        .safeArea(.all)
     }
 }

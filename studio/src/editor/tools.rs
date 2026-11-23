@@ -9,6 +9,8 @@ view! {
         let colors=app.colors();
         Layout {
             TextField("Find text")
+                .autofocus(true)
+                .focusRequest($app.find_focus)
                 .value($app.find_text)
                 .frame(170,32)
                 .background(colors.surface)
@@ -21,7 +23,10 @@ view! {
             Button(strings.next) async { app.find_next().await; }
             Button(strings.replace) async { app.replace_match(false).await; }
             Button(strings.replace_all) async { app.replace_match(true).await; }
-            Button(strings.close_find) { app.find_visible = false; }
+            Button(strings.close_find) {
+                app.find_visible = false;
+                app.focus_editor();
+            }
         }
         .mode(.horizontal)
         .spacing(10)
@@ -31,6 +36,10 @@ view! {
         .scrollableHorizontal()
         .background(colors.surface_container_high)
         .color(colors.on_surface)
+        .shortcut("escape", move || {
+            app.find_visible = false;
+            app.focus_editor();
+        })
     }
 }
 view! {
