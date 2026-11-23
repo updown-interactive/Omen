@@ -1,0 +1,5 @@
+error: expected a Rust expression, not a symbol
+ --> tests/fail/gradient_angle_symbol.rs:2:62
+  |
+2 | fn main() { let _ = view! { Layout {}.gradient(.blue, .red, .top) }; }
+  |                                                              ^^^

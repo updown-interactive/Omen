@@ -1,0 +1,5 @@
+error[E0063]: missing field `subtitle` in initializer of `Header`
+ --> tests/fail/missing_property.rs:3:29
+  |
+3 | fn main() { let _ = view! { Header(title: "a") }; }
+  |                             ^^^^^^ missing `subtitle`

@@ -1,0 +1,13 @@
+[package]
+name = "omen-plugin-ffi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+[lib]
+crate-type = ["rlib", "staticlib", "cdylib"]
+[dependencies]
+omen-plugin = { path = "../omen-plugin" }
+
+[dev-dependencies]
+futures.workspace = true

@@ -1,0 +1,5 @@
+error: checked is only supported on Checkbox and Toggle
+ --> tests/fail/checked_on_field.rs:2:47
+  |
+2 | fn main() { let _ = view! { TextField("Name").checked(true) }; }
+  |                                               ^^^^^^^

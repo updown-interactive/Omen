@@ -1,0 +1,10 @@
+[package]
+name = "native-plugins"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+[dependencies]
+omen-plugin = { path = "../../crates/omen-plugin" }
+omen-native = { path = "../../crates/omen-native" }
+futures.workspace = true

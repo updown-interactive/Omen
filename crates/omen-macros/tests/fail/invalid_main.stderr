@@ -1,0 +1,5 @@
+error: unexpected token
+ --> tests/fail/invalid_main.rs:1:27
+  |
+1 | omen_ui::main! { let x = 1; }
+  |                           ^

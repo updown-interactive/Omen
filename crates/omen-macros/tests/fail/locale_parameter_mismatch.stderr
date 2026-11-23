@@ -1,0 +1,5 @@
+error: unexpected end of input, translation `hello` must use the default locale's parameters and plural shape
+ --> tests/fail/locale_parameter_mismatch.rs:2:89
+  |
+2 | locale! { Strings { default: "en" en { hello: "Hi {name}" } ar { hello: "Hi {person}" } } }
+  |                                                                                         ^

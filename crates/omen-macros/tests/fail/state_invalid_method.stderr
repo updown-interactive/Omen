@@ -1,0 +1,5 @@
+error: expected a state field or Rust method: expected parentheses
+ --> tests/fail/state_invalid_method.rs:2:40
+  |
+2 | state! { Data { count = 0 pub fn broken; } }
+  |                                        ^

@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(omen_android LANGUAGES CXX)
+add_library(omen_plugin_ffi SHARED IMPORTED)
+set_target_properties(omen_plugin_ffi PROPERTIES IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/../jniLibs/${ANDROID_ABI}/libomen_plugin_ffi.so")
+add_library(omen_android SHARED omen_jni.cpp)
+target_compile_features(omen_android PRIVATE cxx_std_17)
+target_include_directories(omen_android PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../../../../ios/Sources/COmenBridge/include")
+target_link_libraries(omen_android PRIVATE omen_plugin_ffi)

@@ -1,0 +1,5 @@
+error: expected one of: identifier, `::`, `<`, `_`, literal, `const`, `ref`, `mut`, `&`, parentheses, square brackets, `..`, `const`
+ --> tests/fail/malformed_action.rs:3:42
+  |
+3 |     let _ = view! { Button("Save") { let = 1; } };
+  |                                          ^

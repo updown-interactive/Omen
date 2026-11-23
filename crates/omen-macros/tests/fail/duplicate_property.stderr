@@ -1,0 +1,5 @@
+error: duplicate view property
+ --> tests/fail/duplicate_property.rs:2:35
+  |
+2 | view! { pub Header(title: String, title: bool) { Text("a") } }
+  |                                   ^^^^^

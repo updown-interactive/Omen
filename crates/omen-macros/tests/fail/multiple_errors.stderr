@@ -1,0 +1,17 @@
+error: reusable views use named arguments: ViewName(property: value)
+ --> tests/fail/multiple_errors.rs:3:30
+  |
+3 |     let _ = view! { Layout { Unknown("a") Text("b").font(.nope).sparkle(1) } };
+  |                              ^^^^^^^
+
+error: unknown font symbol `nope`; available: body, title, largeTitle, caption, footnote, headline, title2
+ --> tests/fail/multiple_errors.rs:3:59
+  |
+3 |     let _ = view! { Layout { Unknown("a") Text("b").font(.nope).sparkle(1) } };
+  |                                                           ^^^^
+
+error: unknown modifier; available: theme, locale, direction, safeArea, safeAreaInsets, paddingToken, spacingToken, navigationTitle, responsive, sheet, dialog, popover, modal, animation, transition, opacity, offset, reducedMotion, key, environment, onTap, onContextMenu, shortcut, onWindowClose, onAppear, onDisappear, effect, task, onError, taskHandle, mode, font, weight, color, background, padding, spacing, cornerRadius, frame, desktopWindow, window, filePicker, fill, truncate, scrollable, scrollableHorizontal, minWidth, virtualized, resizeHandle, alignment, gradient, fontSize, lineHeight, fontFamily, value, checked, onChange, focusable, accessibilityLabel, accessibilityHint, accessibilityRole
+ --> tests/fail/multiple_errors.rs:3:65
+  |
+3 |     let _ = view! { Layout { Unknown("a") Text("b").font(.nope).sparkle(1) } };
+  |                                                                 ^^^^^^^

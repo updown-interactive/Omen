@@ -1,0 +1,5 @@
+error: this name is reserved for a built-in view
+ --> tests/fail/reserved_view_name.rs:2:13
+  |
+2 | view! { pub Layout() { Text("a") } }
+  |             ^^^^^^

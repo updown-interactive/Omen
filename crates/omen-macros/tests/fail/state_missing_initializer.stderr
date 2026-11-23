@@ -1,0 +1,5 @@
+error: @State requires an initializer
+ --> tests/fail/state_missing_initializer.rs:2:32
+  |
+2 | view! { Counter() { @State let count: i32; Text("Count") } }
+  |                                ^^^^^

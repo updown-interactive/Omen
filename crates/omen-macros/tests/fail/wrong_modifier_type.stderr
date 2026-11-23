@@ -1,0 +1,13 @@
+error[E0308]: mismatched types
+ --> tests/fail/wrong_modifier_type.rs:3:36
+  |
+3 |     let _ = view! { Text("a").font(42) };
+  |                               ---- ^^ expected `Font`, found integer
+  |                               |
+  |                               arguments to this method are incorrect
+  |
+note: method defined here
+ --> $WORKSPACE/crates/omen-ui/src/lib.rs
+  |
+  |     fn font(self, value: Font) -> AnyView {
+  |        ^^^^

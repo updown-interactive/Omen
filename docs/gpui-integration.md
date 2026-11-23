@@ -16,11 +16,11 @@ Native examples do not add bundled fonts at this revision; the upstream font hel
 
 ## Architecture
 
-The hello-world executable calls `omen_gpui::run()`. The adapter owns the GPUI App, Window, Context, root entity, and event loop. Future public components belong in omen-ui and renderer-independent contracts belong in omen-core. Phase 1 deliberately leaves their API undefined rather than inventing reactive or identity semantics before Phase 2.
+Both examples use `main!` from omen-ui, which starts `omen_gpui::run_view()` through a hidden backend reexport. The adapter owns the GPUI App, Window, Context, root entity, and event loop. Future public components belong in omen-ui and renderer-independent contracts belong in omen-core. Phase 2 now implements the View contract and owned runtime tree in omen-core, and builders in omen-ui. See [Phase 2 documentation](phase-2.md); the retained runtime now adds stable identity and [reactive lifecycle](reactive-state.md).
 
 The CLI's doctor command only confirms CLI execution. It does not claim to validate graphics drivers, Rust, or native libraries.
 
-## Verification
+## Phase 1 verification (historical)
 
 Validated locally on macOS with stable Rust 1.98.1:
 

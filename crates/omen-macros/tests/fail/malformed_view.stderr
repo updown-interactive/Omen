@@ -1,0 +1,5 @@
+error: unexpected end of input, expected identifier
+ --> tests/fail/malformed_view.rs:3:39
+  |
+3 |     let _ = view! { Text("Hello").font(.) };
+  |                                       ^^^

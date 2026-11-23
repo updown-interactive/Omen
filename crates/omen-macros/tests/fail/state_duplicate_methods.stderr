@@ -1,0 +1,5 @@
+error: duplicate state method
+ --> tests/fail/state_duplicate_methods.rs:2:62
+  |
+2 | state! { Data { count = 0 pub fn change(&mut self) {} pub fn change(&mut self) {} } }
+  |                                                              ^^^^^^

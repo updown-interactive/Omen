@@ -1,0 +1,5 @@
+error: unknown mode symbol `diagonal`; available: horizontal, vertical, stack
+ --> tests/fail/invalid_mode.rs:3:37
+  |
+3 |     let _ = view! { Layout {}.mode(.diagonal) };
+  |                                     ^^^^^^^^

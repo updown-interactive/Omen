@@ -1,0 +1,5 @@
+error: unknown alignment symbol `sideways`; available: leading, center, trailing, top, bottom, topLeading, topTrailing, bottomLeading, bottomTrailing
+ --> tests/fail/invalid_alignment.rs:2:50
+  |
+2 | fn main() { let _ = view! { Layout {}.alignment(.sideways) }; }
+  |                                                  ^^^^^^^^

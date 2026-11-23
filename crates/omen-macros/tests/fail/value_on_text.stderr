@@ -1,0 +1,5 @@
+error: value is only supported on TextField, TextEditor and SecureField
+ --> tests/fail/value_on_text.rs:2:39
+  |
+2 | fn main() { let _ = view! { Text("a").value(42) }; }
+  |                                       ^^^^^

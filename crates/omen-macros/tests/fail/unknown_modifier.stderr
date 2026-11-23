@@ -1,0 +1,5 @@
+error: unknown modifier; available: theme, locale, direction, safeArea, safeAreaInsets, paddingToken, spacingToken, navigationTitle, responsive, sheet, dialog, popover, modal, animation, transition, opacity, offset, reducedMotion, key, environment, onTap, onContextMenu, shortcut, onWindowClose, onAppear, onDisappear, effect, task, onError, taskHandle, mode, font, weight, color, background, padding, spacing, cornerRadius, frame, desktopWindow, window, filePicker, fill, truncate, scrollable, scrollableHorizontal, minWidth, virtualized, resizeHandle, alignment, gradient, fontSize, lineHeight, fontFamily, value, checked, onChange, focusable, accessibilityLabel, accessibilityHint, accessibilityRole
+ --> tests/fail/unknown_modifier.rs:3:35
+  |
+3 |     let _ = view! { Text("Hello").sparkle(1) };
+  |                                   ^^^^^^^

@@ -1,0 +1,7 @@
+error[E0560]: struct `Header` has no field named `unknown`
+ --> tests/fail/unknown_property.rs:3:48
+  |
+3 | fn main() { let _ = view! { Header(title: "a", unknown: true) }; }
+  |                                                ^^^^^^^ `Header` does not have this field
+  |
+  = note: all struct fields are already assigned

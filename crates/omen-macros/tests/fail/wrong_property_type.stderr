@@ -1,0 +1,19 @@
+error[E0277]: the trait bound `std::string::String: From<bool>` is not satisfied
+ --> tests/fail/wrong_property_type.rs:3:43
+  |
+3 | fn main() { let _ = view! { Header(title: false) }; }
+  |                                    -----  ^^^^^ the trait `From<bool>` is not implemented for `std::string::String`
+  |                                    |
+  |                                    required by a bound introduced by this call
+  |
+  = help: `std::string::String` implements trait `From<T>`:
+            From<&mut str>
+            From<&ropey::rope::Rope>
+            From<&std::string::String>
+            From<&str>
+            From<Box<str>>
+            From<Cow<'_, str>>
+            From<char>
+            From<ropey::rope::Rope>
+            From<ropey::slice::RopeSlice<'_>>
+  = note: required for `bool` to implement `Into<std::string::String>`

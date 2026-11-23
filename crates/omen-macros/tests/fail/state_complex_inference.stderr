@@ -1,0 +1,5 @@
+error: cannot infer this state field; specify a type: name: Type = value
+ --> tests/fail/state_complex_inference.rs:2:17
+  |
+2 | state! { Data { items = Vec::new() } }
+  |                 ^^^^^

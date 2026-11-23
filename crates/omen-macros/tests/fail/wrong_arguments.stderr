@@ -1,0 +1,11 @@
+error: Layout requires 0 constructor argument(s)
+ --> tests/fail/wrong_arguments.rs:3:21
+  |
+3 |     let _ = view! { Layout(1) { Text() } };
+  |                     ^^^^^^
+
+error: Text requires 1 constructor argument(s)
+ --> tests/fail/wrong_arguments.rs:3:33
+  |
+3 |     let _ = view! { Layout(1) { Text() } };
+  |                                 ^^^^

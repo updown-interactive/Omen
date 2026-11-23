@@ -1,0 +1,5 @@
+error[E0422]: cannot find struct, variant or union type `Missing` in this scope
+ --> tests/fail/unresolved_view.rs:2:29
+  |
+2 | fn main() { let _ = view! { Missing(title: "a") }; }
+  |                             ^^^^^^^ not found in this scope

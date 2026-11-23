@@ -1,0 +1,30 @@
+# File name: Cargo.toml
+# App name: website
+# Created at: 2026-11-23T02:52:59Z
+# Created by: Siva
+
+[package]
+name = "website"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+omen = { path = "/Users/sivasankar/Documents/UpDown/Omen/crates/omen", default-features = false }
+
+[features]
+default = ["web"]
+native = ["omen/native"]
+web = ["omen/web"]
+
+[lib]
+name = "omen_app"
+path = "src/main.rs"
+crate-type = ["cdylib"]
+
+[profile.mobile]
+inherits = "dev"
+opt-level = 1
+debug = 0
+incremental = false

@@ -1,0 +1,5 @@
+error: spacing is only supported on Layout, Card, and List
+ --> tests/fail/spacing_on_text.rs:3:31
+  |
+3 |     let _ = view! { Text("a").spacing(8) };
+  |                               ^^^^^^^

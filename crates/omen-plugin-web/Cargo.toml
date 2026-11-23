@@ -1,0 +1,12 @@
+[package]
+name = "omen-plugin-web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+[lib]
+crate-type = ["rlib", "cdylib"]
+[dependencies]
+omen-plugin = { path = "../omen-plugin" }
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"

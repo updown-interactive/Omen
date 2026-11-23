@@ -1,0 +1,1 @@
+module COmenBridge { header "omen_bridge.h" export * }

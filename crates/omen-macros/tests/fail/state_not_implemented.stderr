@@ -1,0 +1,5 @@
+error: state! declares a named model; use @State let model = Model::new() inside a view
+ --> tests/fail/state_not_implemented.rs:2:25
+  |
+2 | view! { pub Counter() { state!(count = 0); Text("a") } }
+  |                         ^^^^^

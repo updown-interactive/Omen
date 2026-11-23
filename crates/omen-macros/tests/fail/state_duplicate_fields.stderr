@@ -1,0 +1,5 @@
+error: duplicate model field
+ --> tests/fail/state_duplicate_fields.rs:2:27
+  |
+2 | state! { Data { count = 0 count = 1 } }
+  |                           ^^^^^

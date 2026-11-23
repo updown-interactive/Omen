@@ -1,0 +1,15 @@
+[package]
+name = "native-mobile"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+[dependencies]
+omen = { path = "../../crates/omen", default-features = false }
+[features]
+default = ["native"]
+native = ["omen/native"]
+[lib]
+name = "omen_app"
+path = "src/main.rs"
+crate-type = ["cdylib"]

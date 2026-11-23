@@ -1,0 +1,5 @@
+error: cannot borrow reactive state mutably; use state.update(|value| { ... }) instead
+ --> tests/fail/state_mutable_reference.rs:3:70
+  |
+3 | view! { Screen { @State data = Data() Button("Mutate") { let value = &mut data.count; *value += 1; } } }
+  |                                                                      ^

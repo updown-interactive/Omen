@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, ubuntu-24.04]
+        os: [macos-15, ubuntu-24.04, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -17,6 +17,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
@@ -34,3 +35,61 @@ jobs:
         run: cargo test --workspace --locked
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Check WASM UI
+        run: cargo clippy -p platform-ui --target wasm32-unknown-unknown --no-default-features --features web --locked -- -D warnings
+      - name: Check WASM plugin adapter
+        run: cargo check -p omen-plugin-web --target wasm32-unknown-unknown --locked
+      - name: Test JavaScript native host
+        run: node --test platforms/web/host.test.mjs
+      - name: Check native GPUI iOS application
+        if: runner.os == 'macOS'
+        run: |
+          rustup target add aarch64-apple-ios-sim
+          IPHONEOS_DEPLOYMENT_TARGET=15.0 cargo check -p native-mobile --bin native-mobile --target aarch64-apple-ios-sim --locked
+      - name: Type-check iOS bridge
+        if: runner.os == 'macOS'
+        run: |
+          xcrun swiftc -typecheck -swift-version 5 \
+            -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
+            -target arm64-apple-ios15.0-simulator \
+            -I platforms/ios/Sources/COmenBridge/include \
+            platforms/ios/Sources/OmenNative/OmenNativeBridge.swift
+
+  browser:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check a generated CLI project outside the SDK
+        run: |
+          cargo build -p omen-cli --locked
+          starter_root=$(mktemp -d)
+          (cd "$starter_root" && "$GITHUB_WORKSPACE/target/debug/omen" new cli-starter --sdk "$GITHUB_WORKSPACE")
+          cargo check --manifest-path "$starter_root/cli-starter/Cargo.toml" --target wasm32-unknown-unknown --no-default-features --features web
+      - run: python3 scripts/package.py web
+      - run: npm ci && npx playwright install --with-deps chromium webkit && npx playwright test
+        working-directory: platforms/web/ui-tests
+
+  android-native:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+          components: clippy
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager "ndk;28.2.13676358"
+      - name: Check native GPUI Android backend
+        run: |
+          export CC_aarch64_linux_android="$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          cargo clippy -p native-mobile --lib --target aarch64-linux-android --locked -- -D warnings

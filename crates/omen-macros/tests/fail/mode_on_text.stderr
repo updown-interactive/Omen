@@ -1,0 +1,5 @@
+error: mode is only supported on Layout
+ --> tests/fail/mode_on_text.rs:3:31
+  |
+3 |     let _ = view! { Text("a").mode(.horizontal) };
+  |                               ^^^^

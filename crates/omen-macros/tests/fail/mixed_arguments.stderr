@@ -1,0 +1,11 @@
+error: cannot mix named and positional arguments
+ --> tests/fail/mixed_arguments.rs:2:29
+  |
+2 | fn main() { let _ = view! { Header("a", title: "b") }; }
+  |                             ^^^^^^
+
+error: reusable views use named arguments: ViewName(property: value)
+ --> tests/fail/mixed_arguments.rs:2:29
+  |
+2 | fn main() { let _ = view! { Header("a", title: "b") }; }
+  |                             ^^^^^^

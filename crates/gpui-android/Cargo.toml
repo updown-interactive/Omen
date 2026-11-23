@@ -1,0 +1,23 @@
+[package]
+name = "gpui_android"
+version.workspace = true
+edition.workspace = true
+license = "Apache-2.0"
+publish = false
+
+[features]
+default = []
+gpu-validation = []
+
+[dependencies]
+[target.'cfg(target_os = "android")'.dependencies]
+gpui.workspace = true
+gpui_wgpu = { git = "https://github.com/zed-industries/zed", rev = "faf8f0b6980205ca2659af174790a212ae3c416a" }
+android-activity = { version = "0.6", features = ["native-activity"] }
+anyhow = "1"
+futures.workspace = true
+raw-window-handle = "0.6"
+ndk = { version = "0.9", features = ["rwh_06"] }
+jni = "0.22"
+log = "0.4"
+uuid = "1"

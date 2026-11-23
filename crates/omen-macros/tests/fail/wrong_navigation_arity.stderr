@@ -1,0 +1,5 @@
+error: NavigationStack requires 2 constructor argument(s)
+ --> tests/fail/wrong_navigation_arity.rs:2:23
+  |
+2 | fn main(){let _=view!{NavigationStack() {Text("Root")}};}
+  |                       ^^^^^^^^^^^^^^^

@@ -1,0 +1,5 @@
+error: gradient requires exactly 3 arguments
+ --> tests/fail/gradient_wrong_arity.rs:2:39
+  |
+2 | fn main() { let _ = view! { Layout {}.gradient(.blue, .red) }; }
+  |                                       ^^^^^^^^

@@ -1,0 +1,5 @@
+error: Button requires a Rust action block: Button("Title") { action(); }
+ --> tests/fail/missing_action.rs:3:21
+  |
+3 |     let _ = view! { Button("Save") };
+  |                     ^^^^^^

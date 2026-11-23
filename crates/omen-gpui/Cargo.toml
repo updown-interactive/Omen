@@ -6,6 +6,23 @@ license.workspace = true
 publish = false
 
 [dependencies]
+async-io = "2"
 gpui.workspace = true
-gpui_platform.workspace = true
+
 omen-core = { path = "../omen-core" }
+thiserror.workspace = true
+unicode-segmentation = "1"
+
+[dev-dependencies]
+omen-ui = { path = "../omen-ui", default-features = false }
+gpui = { workspace = true, features = ["test-support"] }
+scheduler = { git = "https://github.com/zed-industries/zed", rev = "faf8f0b6980205ca2659af174790a212ae3c416a", features = ["test-support"] }
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+gpui_platform.workspace = true
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["NSApplication", "NSImage", "NSResponder"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["NSBundle", "NSString", "NSURL"] }
+[target.'cfg(target_os = "android")'.dependencies]
+gpui_android = { path = "../gpui-android" }

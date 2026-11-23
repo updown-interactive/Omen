@@ -1,0 +1,5 @@
+error: reactive mutation through a borrowed method chain is unsupported; use state.update(|value| { ... }) instead
+ --> tests/fail/state_dereference_mutation.rs:3:58
+  |
+3 | view! { Screen { @State data = Data() Button("Mutate") { (*data.items).push(2); } } }
+  |                                                          ^^^^^^^^^^^^^

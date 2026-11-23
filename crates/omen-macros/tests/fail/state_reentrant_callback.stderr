@@ -1,0 +1,5 @@
+error: a reactive mutation callback cannot capture the same state; read needed values before the call, or use one state.update closure
+ --> tests/fail/state_reentrant_callback.rs:3:58
+  |
+3 | view! { Screen { @State data = Data() Button("Mutate") { data.items.retain(|_| data.enabled); } } }
+  |                                                          ^^^^

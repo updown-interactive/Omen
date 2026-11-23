@@ -1,0 +1,35 @@
+error: use Layout with .mode(.horizontal), .mode(.vertical), or .mode(.stack)
+ --> tests/fail/legacy_layout.rs:3:21
+  |
+3 |     let _ = view! { VStack {} HStack {} ZStack {} };
+  |                     ^^^^^^
+
+error: reusable views do not accept a child block
+ --> tests/fail/legacy_layout.rs:3:21
+  |
+3 |     let _ = view! { VStack {} HStack {} ZStack {} };
+  |                     ^^^^^^
+
+error: use Layout with .mode(.horizontal), .mode(.vertical), or .mode(.stack)
+ --> tests/fail/legacy_layout.rs:3:31
+  |
+3 |     let _ = view! { VStack {} HStack {} ZStack {} };
+  |                               ^^^^^^
+
+error: reusable views do not accept a child block
+ --> tests/fail/legacy_layout.rs:3:31
+  |
+3 |     let _ = view! { VStack {} HStack {} ZStack {} };
+  |                               ^^^^^^
+
+error: use Layout with .mode(.horizontal), .mode(.vertical), or .mode(.stack)
+ --> tests/fail/legacy_layout.rs:3:41
+  |
+3 |     let _ = view! { VStack {} HStack {} ZStack {} };
+  |                                         ^^^^^^
+
+error: reusable views do not accept a child block
+ --> tests/fail/legacy_layout.rs:3:41
+  |
+3 |     let _ = view! { VStack {} HStack {} ZStack {} };
+  |                                         ^^^^^^

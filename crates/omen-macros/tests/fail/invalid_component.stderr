@@ -1,0 +1,5 @@
+error: reusable views use named arguments: ViewName(property: value)
+ --> tests/fail/invalid_component.rs:3:21
+  |
+3 |     let _ = view! { UnknownWidget("Hello") };
+  |                     ^^^^^^^^^^^^^

@@ -1,61 +1,65 @@
-# Omen UI DSL Specification — Draft v0.1
+# Omen UI language
 
-## Design principles
+Omen has two public macros:
 
-Omen is a declarative Rust UI framework inspired by SwiftUI.
+- `main!` starts the native application with a view expression.
+- `view!` constructs an anonymous view or declares one or more reusable named views.
 
-1. UI components use `Text("Hello")`, not `Text::new("Hello")`.
-2. Layout containers use nested blocks such as `VStack { ... }`.
-3. Modifiers are chainable: `.padding(16).background(.blue)`.
-4. Application code should not require direct GPUI `Window` or `Context` parameters.
-5. State should be reactive, with concise declarations and two-way bindings.
-6. Rust types, ownership, and compiler safety remain intact after macro expansion.
+All UI is a view. Application code does not write view trait implementations, render contexts, or application entry-point functions.
 
-## Proposed syntax
+```rust,ignore
+use omen::{main, view};
 
-```
-#[component]
-fn Counter() -> impl View {
-    @State let count = 0;
+view! {
+    pub Header(title: String) {
+        let heading = format!("Hello, {title}");
+        Text(heading).font(.largeTitle)
+    }
+}
 
+main! {
     view! {
-        VStack {
-            Text("Count: {count}")
-                .font(.title)
-
-            Button("Increment") {
-                count += 1;
-            }
-            .style(.primary)
-        }
-        .spacing(16)
-        .padding(24)
+        Layout {
+            Header(title: "Omen")
+            Text("Views compose views")
+        }.spacing(16).padding(24)
     }
 }
 ```
 
-## Syntax conventions
+Named views use ordinary Rust module visibility and imports. Property arguments use names, may appear in any order, and are converted into their declared types. String literals can therefore initialize String properties. Rust checks missing/unknown properties and incompatible types. Built-in Text, Button, and List retain positional arguments; Layout takes a child block and a mode modifier.
 
-- `#[component]`: transforms a component function.
-- `view!`: parses a declarative UI tree.
-- `@State`: declares local reactive state inside a component macro.
-- `$value`: references a two-way binding.
-- `.modifier(...)`: transforms a view or configures its behavior.
-- `if` and `for`: provide conditional and repeated UI.
-- `Button("Title") { ... }`: declares an event action.
+Several named declarations can share one `view!` block. Place `@Design`
+immediately before a named declaration to set Studio’s default preview for the
+file and enable Design and Split. View files without a marker open in Code.
+Replace existing `@Preview` markers with `@Design`.
+Application entry points and navigation continue to use the views named
+in application code.
 
-## Compiler requirements
+Local Rust statements can precede the UI tree inside a named view. Button blocks are ordinary Rust callbacks. See [the grammar](omen-grammar.md) for exact syntax and ownership behavior.
 
-- Produce valid Rust from the DSL.
-- Preserve Rust type checking.
-- Report meaningful errors at the original source locations.
-- Avoid implicit global mutable state.
-- Preserve component identity across rerenders.
-- Support future cross-platform rendering backends.
+Named views support `@State`, `@Environment`, `$binding`, automatic dependency invalidation, lifecycle hooks, and cancellable async actions. Text literals can interpolate declared state captures; `format!` supports other computed text. See [reactive state and lifecycle](reactive-state.md). `state!` is rejected to keep the public macro language to `main!` and `view!`.
 
-## Phase 1 scope
 
-The DSL is a documented design only. The initial milestone is a working GPUI desktop window and an extensible workspace architecture.
+## Hex colors
 
-The syntax above is intentionally illustrative: `@State`, `.title`, and `$value` require custom parsing or transformation. They cannot be used as ordinary Rust expressions.
+`color` (also spelled `textColor` or `textcolor`), `background`,
+`hoverBackground`, and the two color stops of `gradient` accept theme tokens
+and hex strings. Hex strings accept an optional `#` and use RGB, RGBA,
+RRGGBB, or RRGGBBAA order.
 
+```rust,ignore
+view! {
+    Layout {
+        Text("Omen")
+            .textColor("#F5F7FF")
+            .background("#18233B")
+            .hoverBackground("#243455")
+        Text("Gradient").gradient(.accent, "#18233BC0", 45)
+    }
+}
+```
+
+Use `Color::from_hex` to validate a string received from user input or a data
+source. Invalid strings passed directly to the Rust modifiers resolve to
+transparent. The DSL reports invalid string literals at compile time.

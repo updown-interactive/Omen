@@ -6,4 +6,19 @@ license.workspace = true
 publish = false
 
 [dependencies]
+omen-plugin = { path = "../omen-plugin" }
 omen-core = { path = "../omen-core" }
+omen-macros = { path = "../omen-macros" }
+omen-web = { path = "../omen-web", optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+omen-gpui = { path = "../omen-gpui", optional = true }
+
+[features]
+default = ["desktop"]
+native = ["dep:omen-gpui"]
+desktop = ["native"]
+web = ["dep:omen-web"]
+
+[dev-dependencies]
+futures.workspace = true

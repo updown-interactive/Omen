@@ -1,0 +1,10 @@
+[package]
+name = "controls-gallery"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+omen = { path = "../../crates/omen" }
+omen-components = { path = "../../crates/omen-components" }

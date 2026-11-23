@@ -1,0 +1,5 @@
+error: frame requires exactly 2 arguments
+ --> tests/fail/wrong_frame_arity.rs:2:39
+  |
+2 | fn main() { let _ = view! { Text("a").frame(20) }; }
+  |                                       ^^^^^

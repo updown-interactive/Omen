@@ -1,0 +1,5 @@
+error: duplicate view argument
+ --> tests/fail/duplicate_argument.rs:3:48
+  |
+3 | fn main() { let _ = view! { Header(title: "a", title: "b") }; }
+  |                                                ^^^^^

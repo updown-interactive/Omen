@@ -1,0 +1,8 @@
+# File name: .gitignore
+# App name: website
+# Created at: 2026-11-23T02:52:59Z
+# Created by: Siva
+
+/target/
+/.omen/
+.DS_Store

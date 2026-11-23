@@ -1,0 +1,7 @@
+error: unexpected end of input, view! requires at least one view
+ --> tests/fail/empty_view.rs:3:13
+  |
+3 |     let _ = view! {};
+  |             ^^^^^^^^
+  |
+  = note: this error originates in the macro `view` (in Nightly builds, run with -Z macro-backtrace for more info)

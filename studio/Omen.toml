@@ -1,0 +1,22 @@
+[app]
+name = "Omen Studio"
+id = "dev.omen.studio"
+version = "0.1.0"
+icon = "assets/logo.png"
+
+[window]
+title = "Welcome to Omen Studio"
+width = 960
+height = 720
+
+[android]
+renderer = "native"
+
+[ios]
+renderer = "native"
+
+[web]
+renderer = "dom"
+
+[toolchain]
+sdk = ".."

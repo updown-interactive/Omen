@@ -12,3 +12,10 @@ proc-macro = true
 syn.workspace = true
 quote.workspace = true
 proc-macro2.workspace = true
+omen-macro-core = { path = "../omen-macro-core" }
+
+proc-macro-crate = "3"
+
+[dev-dependencies]
+trybuild = "1"
+omen-ui = { path = "../omen-ui", default-features = false }

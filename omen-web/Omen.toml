@@ -1,0 +1,29 @@
+# File name: Omen.toml
+# App name: omen-web
+# Created at: 2026-11-22T11:06:50Z
+# Created by: Siva
+
+[app]
+name = "omen-web"
+id = "com.updown.omenweb"
+version = "0.1.0"
+
+[targets]
+platforms = ["web"]
+
+[window]
+title = "Omen Web"
+width = 1100
+height = 720
+
+[android]
+renderer = "native"
+
+[ios]
+renderer = "native"
+
+[web]
+renderer = "dom"
+
+[toolchain]
+sdk = "/Users/sivasankar/Documents/UpDown/Omen"

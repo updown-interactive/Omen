@@ -6,4 +6,4 @@ license.workspace = true
 publish = false
 
 [dependencies]
-omen-gpui = { path = "../../crates/omen-gpui" }
+omen = { path = "../../crates/omen" }

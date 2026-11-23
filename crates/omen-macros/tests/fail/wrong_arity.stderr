@@ -1,0 +1,5 @@
+error: modifier requires exactly one argument
+ --> tests/fail/wrong_arity.rs:3:31
+  |
+3 |     let _ = view! { Text("a").font(.title, .body) };
+  |                               ^^^^

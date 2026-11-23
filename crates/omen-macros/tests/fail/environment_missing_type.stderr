@@ -1,0 +1,5 @@
+error: unknown environment value; supply its type with @Environment name: Type
+ --> tests/fail/environment_missing_type.rs:2:38
+  |
+2 | view! { Counter() { @Environment let model; Text("Model") } }
+  |                                      ^^^^^

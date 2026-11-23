@@ -1,0 +1,37 @@
+{
+  "app-visual.rs": {
+    "mtime": 1795064002.5297534,
+    "ast_hash": "cd4c5502e6027da3184ae4ef62eed355",
+    "semantic_hash": ""
+  },
+  "reactive.rs": {
+    "mtime": 1795064002.532521,
+    "ast_hash": "e2fc20910962165e08b704ca4da5f444",
+    "semantic_hash": ""
+  },
+  "visual/canvas.rs": {
+    "mtime": 1795064002.5267725,
+    "ast_hash": "f936dfe556ed4429b9fc5c4174cc67d5",
+    "semantic_hash": ""
+  },
+  "visual/mod.rs": {
+    "mtime": 1795064002.5260026,
+    "ast_hash": "705018bcf48c9749f9588f7ca9fa095d",
+    "semantic_hash": ""
+  },
+  "visual/placement.rs": {
+    "mtime": 1795064002.5270944,
+    "ast_hash": "38e3824b2d495fd54562d38d6d4553cc",
+    "semantic_hash": ""
+  },
+  "visual/render.rs": {
+    "mtime": 1795064002.5256326,
+    "ast_hash": "460ce089d47f165ed0c15ec2fae5f507",
+    "semantic_hash": ""
+  },
+  "visual/view_tree.rs": {
+    "mtime": 1795064002.52633,
+    "ast_hash": "10799e94506aebddb9d6db14fab67dfc",
+    "semantic_hash": ""
+  }
+}

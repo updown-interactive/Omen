@@ -1,0 +1,13 @@
+[package]
+name = "omen-macro-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+omen-core = { path = "../omen-core" }
+syn.workspace = true
+quote.workspace = true
+proc-macro2 = { workspace = true, features = ["span-locations"] }
+unic-langid = "0.9"

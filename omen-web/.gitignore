@@ -1,0 +1,8 @@
+# File name: .gitignore
+# App name: omen-web
+# Created at: 2026-11-22T11:06:50Z
+# Created by: Siva
+
+/target/
+/.omen/
+.DS_Store

@@ -1,0 +1,5 @@
+error: unknown theme symbol `sepia`; available: light, dark, system
+ --> tests/fail/invalid_theme.rs:2:44
+  |
+2 | fn main(){let _=view!{Text("Theme").theme(.sepia)};}
+  |                                            ^^^^^

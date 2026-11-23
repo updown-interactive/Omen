@@ -1,0 +1,11 @@
+{
+  "package": "platform-ui",
+  "name": "Omen Platform Demo",
+  "identifier": "dev.omen.platformdemo",
+  "version": "0.1.0",
+  "permissions": [
+    "fs.read",
+    "fs.write"
+  ],
+  "native_package": "native-mobile"
+}

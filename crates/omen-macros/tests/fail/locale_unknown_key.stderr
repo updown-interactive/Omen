@@ -1,0 +1,7 @@
+error[E0599]: no method named `missing` found for struct `Strings` in the current scope
+ --> tests/fail/locale_unknown_key.rs:3:59
+  |
+2 | locale! { Strings { default: "en" en { welcome: "Welcome" } } }
+  | ----------------- method `missing` not found for this struct
+3 | view! { Home { @Localize strings = Strings() Text(strings.missing) } }
+  |                                                           ^^^^^^^ method not found in `Strings`

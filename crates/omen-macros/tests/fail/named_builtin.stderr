@@ -1,0 +1,5 @@
+error: built-in views use positional arguments
+ --> tests/fail/named_builtin.rs:2:29
+  |
+2 | fn main() { let _ = view! { Text(content: "a") }; }
+  |                             ^^^^
