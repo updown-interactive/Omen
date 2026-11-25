@@ -18,7 +18,6 @@ view! {
         let state=editor.as_ref().map(|document|document.state.get()).unwrap_or_default();
         let inspected=app.inspector;
         let query=(app.inspector_query).to_lowercase();
-        let current=inspected.path==active && inspected.identity==state.text.identity() && inspected.cursor==state.selection.end;
         Layout {
             Layout {
                 Icon("spanner")
@@ -41,11 +40,11 @@ view! {
                         cursor: state.selection.end
                     )
                     .key(format!("{}:{}:{}",path.display(),state.text.identity(),state.selection.end))
-                    if current {
-                        if !inspected.message.is_empty() { Text(inspected.message.clone())
-                                .font(.caption)
-                                .color(colors.on_surface_variant) }
+                    if inspected.path.as_ref() == Some(&path) {
                         if let Some(node)=inspected.node.clone() {
+                            if !inspected.message.is_empty() { Text(inspected.message.clone())
+                                    .font(.caption)
+                                    .color(colors.on_surface_variant) }
                             Layout {
                                 Layout {
                                     Icon("file-omen-view").frame(19,19).color(colors.accent_foreground)
@@ -64,7 +63,7 @@ view! {
                                 InspectorName(
                                     name: node.design_name().unwrap_or_default(),
                                     revision: inspected.revision
-                                ).key(format!("{}:{}:name:{:?}", path.display(), node.name_range.start, node.design_name()))
+                                ).key(format!("{}:{}:name", path.display(), node.component))
                             }
                             if let Some(direction) = inspector_direction(&node) {
                                 LayoutDirectionInspector(current: direction, revision: inspected.revision)
@@ -81,7 +80,7 @@ view! {
                                                 property: property.clone(),
                                                 identity: inspected.revision
                                             )
-                                            .key(format!("{}:{}:{}",node.name_range.start,category,index))
+                                            .key(format!("{}:{}:{}", category, property.name, index))
                                         }
                                     }
                                     .spacing(9).padding(9)
@@ -121,6 +120,14 @@ view! {
                                 .fontSize(11)
                                 .color(colors.accent_foreground)
                             }
+                        } else if !inspected.message.is_empty() {
+                            Text(inspected.message.clone())
+                                .font(.caption)
+                                .color(colors.on_surface_variant)
+                        } else {
+                            Text("Reading component…")
+                                .font(.caption)
+                                .color(colors.on_surface_variant)
                         }
                     } else { Text("Reading component…")
                             .font(.caption)
@@ -245,9 +252,11 @@ view! {
     InspectorName(name: String, revision: u64) {
         @Environment app: StudioEnvironment
         @State draft = name.clone()
+        @State source_name = name.clone()
         let colors = app.colors();
-        let input: Binding<String> = $draft.into();
-        let field = input.clone();
+        let synced = sync_name($draft.into(), $source_name.into(), &name);
+        let input = synced.clone();
+        let field = synced.clone();
         let save = omen::Action::new(move || {
             let value = input.get();
             if value != name {
@@ -265,6 +274,18 @@ view! {
         }
         .padding(9).spacing(6).background(colors.surface).cornerRadius(8)
     }
+}
+
+fn sync_name(
+    draft: Binding<String>,
+    previous: Binding<String>,
+    name: &str,
+) -> Binding<String> {
+    if previous.get() != name {
+        draft.set(name.to_string());
+        previous.set(name.to_string());
+    }
+    draft
 }
 
 view! {

@@ -48,7 +48,7 @@ impl From<StoredDocument> for Document {
 }
 impl Document {
     pub fn dirty(&self) -> bool {
-        !self.content.same_snapshot(&self.baseline)
+        !self.content.same_snapshot(&self.baseline) && self.content != self.baseline
     }
     pub fn tab_title(&self) -> String {
         format!(

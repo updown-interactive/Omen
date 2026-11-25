@@ -25,32 +25,12 @@ pub async fn background<T: Send + 'static>(
 }
 const MAX_FILE: u64 = 2 * 1024 * 1024;
 const MAX_RESULTS: usize = 1000;
-/// Literal search includes current unsaved snapshots, skips generated folders,
-/// binary/large files and symlinks, and bounds traversal and result counts.
-pub fn search(
-    root: PathBuf,
-    query: String,
-    case_sensitive: bool,
-    documents: BTreeMap<PathBuf, TextSnapshot>,
-) -> Result<SearchResults, String> {
+fn walk_project_files(root: &Path) -> Result<(PathBuf, Vec<PathBuf>, bool), String> {
     let root = root.canonicalize().map_err(|e| e.to_string())?;
-    let mut result = SearchResults {
-        root: Some(root.clone()),
-        query: query.clone(),
-        case_sensitive,
-        ..Default::default()
-    };
-    if query.is_empty() {
-        return Ok(result);
-    }
-    let needle = if case_sensitive {
-        query.clone()
-    } else {
-        query.to_lowercase()
-    };
     let mut pending = vec![root.clone()];
+    let mut files = Vec::new();
     let mut seen = 0;
-    let mut bytes = 0;
+    let mut truncated = false;
     while let Some(directory) = pending.pop() {
         let mut entries: Vec<_> = fs::read_dir(&directory)
             .map_err(|e| e.to_string())?
@@ -60,9 +40,9 @@ pub fn search(
         entries.sort_by_key(|entry| entry.file_name());
         for entry in entries {
             seen += 1;
-            if seen > 50_000 || bytes > 64 * 1024 * 1024 {
-                result.truncated = true;
-                return Ok(result);
+            if seen > 50_000 {
+                truncated = true;
+                return Ok((root, files, truncated));
             }
             let kind = entry.file_type().map_err(|e| e.to_string())?;
             if kind.is_symlink() {
@@ -98,58 +78,101 @@ pub fn search(
             if !kind.is_file() || entry.metadata().map_err(|e| e.to_string())?.len() > MAX_FILE {
                 continue;
             }
-            let content = if let Some(snapshot) = documents.get(&path) {
-                if snapshot.len() as u64 > MAX_FILE {
-                    continue;
-                }
-                snapshot.to_string()
-            } else {
-                let mut data = Vec::new();
-                fs::File::open(&path)
-                    .and_then(|file| file.take(MAX_FILE + 1).read_to_end(&mut data))
-                    .map_err(|e| e.to_string())?;
-                if data.len() as u64 > MAX_FILE || data.contains(&0) {
-                    continue;
-                }
-                let Ok(text) = String::from_utf8(data) else {
-                    continue;
-                };
-                text
+            files.push(path);
+        }
+    }
+    Ok((root, files, truncated))
+}
+
+/// Bounded sorted list of editable files inside the workspace root.
+pub fn list_files(root: PathBuf) -> Result<Vec<PathBuf>, String> {
+    let (_, mut files, _) = walk_project_files(&root)?;
+    files.sort();
+    Ok(files)
+}
+
+/// Literal search includes current unsaved snapshots, skips generated folders,
+/// binary/large files and symlinks, and bounds traversal and result counts.
+pub fn search(
+    root: PathBuf,
+    query: String,
+    case_sensitive: bool,
+    documents: BTreeMap<PathBuf, TextSnapshot>,
+) -> Result<SearchResults, String> {
+    let root = root.canonicalize().map_err(|e| e.to_string())?;
+    let mut result = SearchResults {
+        root: Some(root.clone()),
+        query: query.clone(),
+        case_sensitive,
+        ..Default::default()
+    };
+    if query.is_empty() {
+        return Ok(result);
+    }
+    let needle = if case_sensitive {
+        query.clone()
+    } else {
+        query.to_lowercase()
+    };
+    let (_, files, truncated) = walk_project_files(&root)?;
+    result.truncated = truncated;
+    let mut bytes = 0;
+    for path in files {
+        if bytes > 64 * 1024 * 1024 {
+            result.truncated = true;
+            return Ok(result);
+        }
+        let content = if let Some(snapshot) = documents.get(&path) {
+            if snapshot.len() as u64 > MAX_FILE {
+                continue;
+            }
+            snapshot.to_string()
+        } else {
+            let mut data = Vec::new();
+            fs::File::open(&path)
+                .and_then(|file| file.take(MAX_FILE + 1).read_to_end(&mut data))
+                .map_err(|e| e.to_string())?;
+            if data.len() as u64 > MAX_FILE || data.contains(&0) {
+                continue;
+            }
+            let Ok(text) = String::from_utf8(data) else {
+                continue;
             };
-            bytes += content.len();
-            for (line, text) in content.lines().enumerate() {
-                let haystack = if case_sensitive {
-                    text.to_string()
+            text
+        };
+        bytes += content.len();
+        for (line, text) in content.lines().enumerate() {
+            let haystack = if case_sensitive {
+                text.to_string()
+            } else {
+                text.to_lowercase()
+            };
+            if let Some(offset) = haystack.find(&needle) {
+                // Case-folding can expand Unicode characters: map the folded
+                // offset back to the original UTF-16 column used by the editor.
+                let character = if case_sensitive {
+                    text[..offset].encode_utf16().count()
                 } else {
-                    text.to_lowercase()
-                };
-                if let Some(offset) = haystack.find(&needle) {
-                    // Case-folding can expand Unicode characters: map the folded
-                    // offset back to the original UTF-16 column used by the editor.
-                    let character = if case_sensitive {
-                        text[..offset].encode_utf16().count()
-                    } else {
-                        let mut folded = 0;
-                        let mut column = 0;
-                        for ch in text.chars() {
-                            if folded >= offset {
-                                break;
-                            }
-                            folded += ch.to_lowercase().collect::<String>().len();
-                            column += ch.len_utf16();
+                    let mut folded = 0;
+                    let mut column = 0;
+                    for ch in text.chars() {
+                        if folded >= offset {
+                            break;
                         }
-                        column
-                    };
-                    result.matches.push(SearchMatch {
-                        path: path.clone(),
-                        line,
-                        character,
-                        preview: text.trim().chars().take(220).collect(),
-                    });
-                    if result.matches.len() >= MAX_RESULTS {
-                        result.truncated = true;
-                        return Ok(result);
+                        folded += ch.to_lowercase().collect::<String>().len();
+                        column += ch.len_utf16();
                     }
+                    column
+                };
+                result.matches.push(SearchMatch {
+                    path: path.clone(),
+                    line,
+                    character,
+                    preview: text.trim().chars().take(220).collect(),
+                });
+                if result.matches.len() >= MAX_RESULTS {
+                    result.truncated = true;
+                    return Ok(result);
                 }
             }
         }

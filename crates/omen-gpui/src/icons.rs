@@ -30,6 +30,8 @@ pub(crate) fn render(name: &str) -> gpui::Svg {
         "spanner" | "wrench" => include_bytes!("../assets/icons/spanner.svg"),
         "settings" => include_bytes!("../assets/icons/settings.svg"),
         "info" => include_bytes!("../assets/icons/info.svg"),
+        "eye" => include_bytes!("../assets/icons/eye.svg"),
+        "eye-closed" | "eye-off" => include_bytes!("../assets/icons/eye-closed.svg"),
         path => return gpui::svg().external_path(path.to_string()),
     };
     gpui::svg().data(bytes)

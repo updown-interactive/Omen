@@ -1575,3 +1575,311 @@ view! { Home { Text("@Design") } }
     pool.run_until_stalled();
     assert_eq!(has_modes(&runtime.render().unwrap()), 2);
 }
+
+#[test]
+fn home_view_previews_in_studio_design_canvas() {
+    let source = include_str!("../../website/src/views/home_view.rs");
+    let tree = VisualTree::parse(source).unwrap();
+    assert_eq!(tree.declaration_name(), Some("Home"));
+    assert!(!tree.nodes.is_empty());
+    eprintln!("Tree nodes count: {}", tree.nodes.len());
+    for (i, node) in tree.nodes.iter().enumerate() {
+        if node.component == "AdaptiveGrid" || node.properties.iter().any(|p| p.name == "direction" || p.name == "mode") {
+            eprintln!("Node {i}: component={}, props={:?}", node.component, node.properties.iter().map(|p| (&p.name, &p.value)).collect::<Vec<_>>());
+        }
+    }
+}
+
+#[gpui::test]
+fn canvas_zoom_preserves_frame_internal_layout_context(cx: &mut gpui::TestAppContext) {
+    use omen_gpui::OmenWindow;
+
+    cx.executor().allow_parking();
+    let fixture = Fixture(std::env::temp_dir().join(format!("omen-test-zoom-{}", std::process::id())));
+    let root = fixture.0.join("project");
+    fs::create_dir_all(&root).unwrap();
+    let root = root.canonicalize().unwrap();
+    let home = root.join("home_view.rs");
+    let source = include_str!("../../website/src/views/home_view.rs");
+    fs::write(&home, source).unwrap();
+    let app = StudioEnvironment::at(fixture.0.join("profile"));
+    let mut pool = LocalPool::new();
+    pool.spawner().spawn_local(app.receive()).unwrap();
+    app.send(Command::OpenProject(root));
+    app.send(Command::OpenFile(home.clone()));
+    app.flush();
+    pool.run_until_stalled();
+
+    // Configure a WebDesktop frame (width: 1280, height: 800)
+    app.update_canvas(&home, |canvas| {
+        canvas.fit_to_view = false;
+        canvas.zoom = 100.;
+        canvas.pan = [0., 0.];
+        canvas.frames[0] = omen_studio::visual::VisualFrame::new(1, Profile::WebDesktop);
+    });
+    let text = app.editor_document(home.clone()).state.get().text;
+    block_on(app.analyze_visual(home.clone(), text));
+
+    let (_, vcx) = cx.add_window_view(|_, _| OmenWindow::new(app.editor_view()));
+    vcx.run_until_parked();
+
+    let selector = |text| -> &'static str {
+        let offset = source.find(text).unwrap();
+        Box::leak(format!("studio-placement-{offset}").into_boxed_str())
+    };
+
+    // Headline in hero left column:
+    // "Build Native & Web Apps in Rust with SwiftUI-Like Elegance"
+    // Card in hero right column:
+    // "● ● ●"
+    let headline_100 = vcx.debug_bounds(selector("Text(\"Build Native & Web Apps in Rust with SwiftUI-Like Elegance\")"));
+    let right_hero_100 = vcx.debug_bounds(selector("Text(\"● ● ●\")"));
+    let grid_1_100 = vcx.debug_bounds(selector("Text(\"100%\")"));
+    let grid_2_100 = vcx.debug_bounds(selector("Text(\"< 1ms\")"));
+
+    let h100 = headline_100.expect("headline at 100%");
+    let r100 = right_hero_100.expect("right hero at 100%");
+    let g1_100 = grid_1_100.expect("grid 1 at 100%");
+    let g2_100 = grid_2_100.expect("grid 2 at 100%");
+
+    // Now zoom out significantly to 20%
+    app.update_canvas(&home, |canvas| {
+        canvas.zoom = 20.;
+    });
+    vcx.run_until_parked();
+
+    let headline_20 = vcx.debug_bounds(selector("Text(\"Build Native & Web Apps in Rust with SwiftUI-Like Elegance\")"));
+    let right_hero_20 = vcx.debug_bounds(selector("Text(\"● ● ●\")"));
+    let grid_1_20 = vcx.debug_bounds(selector("Text(\"100%\")"));
+    let grid_2_20 = vcx.debug_bounds(selector("Text(\"< 1ms\")"));
+
+    let h20 = headline_20.expect("headline at 20%");
+    let r20 = right_hero_20.expect("right hero at 20%");
+    let g1_20 = grid_1_20.expect("grid 1 at 20%");
+    let g2_20 = grid_2_20.expect("grid 2 at 20%");
+
+    // Verify layout topology: hero remains side-by-side (headline is to the left of right_hero)
+    // rather than collapsing into single-column layout
+    assert!(h100.origin.x < r100.origin.x, "headline should be left of right_hero at 100%");
+    assert!(h20.origin.x < r20.origin.x, "headline should remain left of right_hero at 20%");
+
+    // Verify adaptive grid items remain on the same row (same y) at both 100% and 20%
+    assert_eq!(g1_100.origin.y, g2_100.origin.y, "grid items should align vertically at 100%");
+    assert_eq!(g1_20.origin.y, g2_20.origin.y, "grid items should align vertically at 20%");
+
+    // Verify visual metrics scaled down proportionally to ~0.20
+    let headline_ratio = f32::from(h20.size.width) / f32::from(h100.size.width);
+    assert!((headline_ratio - 0.20).abs() < 0.02, "expected headline width ratio ~0.20, got {headline_ratio}");
+
+    let grid_ratio = f32::from(g1_20.size.width) / f32::from(g1_100.size.width);
+    assert!((grid_ratio - 0.20).abs() < 0.02, "expected grid width ratio ~0.20, got {grid_ratio}");
+}
+
+#[gpui::test]
+fn frame_focus_eye_disables_design_surface_and_routes_scroll_and_mouse_to_frame(
+    cx: &mut gpui::TestAppContext,
+) {
+    use gpui::{MouseButton, ScrollDelta, ScrollEvent, point, px};
+    use omen_gpui::OmenWindow;
+
+    cx.executor().allow_parking();
+    let fixture =
+        Fixture(std::env::temp_dir().join(format!("omen-frame-focus-{}", std::process::id())));
+    let root = fixture.0.join("project");
+    fs::create_dir_all(&root).unwrap();
+    let root = root.canonicalize().unwrap();
+    let home = root.join("home_view.rs");
+    let rows = (1..=30)
+        .map(|i| format!("            Text(\"Row {i}\").frame(.infinity, 40)\n"))
+        .collect::<String>();
+    let source = format!(
+        r#"use omen::prelude::*;
+view! {{
+    @Design
+    pub Home {{
+        Layout {{
+            TextField("Note")
+            Button("Open details") {{ Route::Detail.push(); }}
+{rows}            TextField("Bottom note")
+        }}.spacing(4)
+    }}
+    pub Detail {{
+        Text("Detail page")
+    }}
+}}
+"#
+    );
+    fs::write(&home, &source).unwrap();
+
+    let app = StudioEnvironment::at(fixture.0.join("profile"));
+    let mut pool = LocalPool::new();
+    pool.spawner().spawn_local(app.receive()).unwrap();
+    app.send(Command::OpenProject(root));
+    app.send(Command::OpenFile(home.clone()));
+    app.flush();
+    pool.run_until_stalled();
+
+    app.update_canvas(&home, |canvas| {
+        canvas.fit_to_view = false;
+        canvas.zoom = 100.;
+        canvas.pan = [0., 0.];
+        canvas.frames[0] = omen_studio::visual::VisualFrame::new(1, Profile::IPhone);
+        canvas.frames[0].height = 300;
+    });
+    let document = app.editor_document(home.clone());
+    block_on(app.analyze_visual(home.clone(), document.state.get().text));
+
+    let has_icon = |root: &ViewNode, icon_name: &str| -> bool {
+        let mut found = Vec::new();
+        find_nodes(
+            root,
+            &|node| matches!(&node.kind, ViewKind::Icon(name) if name == icon_name),
+            &mut found,
+        );
+        !found.is_empty()
+    };
+
+    let mut runtime = Runtime::new(app.editor_view().into_node());
+    let before_view = runtime.render().unwrap();
+    assert!(has_icon(&before_view, "eye-closed"));
+    assert!(!has_icon(&before_view, "eye"));
+
+    let (_, vcx) = cx.add_window_view(|_, _| OmenWindow::new(app.editor_view()));
+    vcx.run_until_parked();
+
+    let surface = vcx.debug_bounds("studio-canvas").unwrap();
+    let grip = vcx.debug_bounds("studio-frame-grip").unwrap();
+    let screen = vcx.debug_bounds("studio-device-screen").unwrap();
+    assert!(vcx.debug_bounds("studio-floating-panel").is_some());
+
+    // Eye button sits immediately to the right of the "⋯" settings button (width 23 + spacing 5).
+    let eye_button = point(grip.right() + px(44.5), grip.center().y);
+    assert!(surface.contains(&eye_button));
+    vcx.simulate_click(eye_button, Default::default());
+    vcx.run_until_parked();
+
+    let focused_settings = app.canvas_settings(&home);
+    assert_eq!(focused_settings.focused_frame, Some(1));
+    let focused_view = runtime.render().unwrap();
+    assert!(has_icon(&focused_view, "eye"));
+    assert!(!has_icon(&focused_view, "eye-closed"));
+    assert!(vcx.debug_bounds("studio-frame-grip").is_none());
+    assert!(vcx.debug_bounds("studio-floating-panel").is_none());
+
+    let zoom_before = focused_settings.zoom;
+    let pan_before = focused_settings.pan;
+    let pos_before = focused_settings.frames[0].position;
+
+    // Scrolling with Ctrl over the frame must NOT zoom the design section.
+    vcx.simulate_event(ScrollEvent {
+        position: screen.center(),
+        delta: ScrollDelta::Pixels(point(px(0.), px(60.))),
+        modifiers: gpui::Modifiers {
+            control: true,
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+    vcx.run_until_parked();
+    assert_eq!(app.canvas_settings(&home).zoom, zoom_before);
+    assert_eq!(app.canvas_settings(&home).pan, pan_before);
+
+    // Dragging on the canvas background or frame header must NOT pan or move the frame.
+    let bg = surface.origin + point(px(12.), px(12.));
+    vcx.simulate_mouse_down(bg, MouseButton::Left, Default::default());
+    vcx.simulate_mouse_move(bg + point(px(40.), px(30.)), MouseButton::Left, Default::default());
+    vcx.simulate_mouse_up(bg + point(px(40.), px(30.)), MouseButton::Left, Default::default());
+    vcx.simulate_mouse_down(grip.center(), MouseButton::Left, Default::default());
+    vcx.simulate_mouse_move(
+        grip.center() + point(px(30.), px(20.)),
+        MouseButton::Left,
+        Default::default(),
+    );
+    vcx.simulate_mouse_up(
+        grip.center() + point(px(30.), px(20.)),
+        MouseButton::Left,
+        Default::default(),
+    );
+    vcx.run_until_parked();
+    assert_eq!(app.canvas_settings(&home).pan, pan_before);
+    assert_eq!(app.canvas_settings(&home).frames[0].position, pos_before);
+
+    // Interactive controls inside the focused frame receive mouse clicks and keyboard input
+    // without triggering design selection or design backspace deletion.
+    let initial_selection = document.state.get().selection.clone();
+    vcx.simulate_click(screen.origin + point(px(60.), px(14.)), Default::default());
+    vcx.run_until_parked();
+    let note_focus = vcx.update(|window, cx| window.focused(cx));
+    assert!(note_focus.is_some(), "top TextField must accept focus");
+    vcx.simulate_input("ab");
+    vcx.simulate_keystrokes("backspace");
+    vcx.run_until_parked();
+    assert_eq!(document.state.get().text.to_string(), source);
+    assert_eq!(document.state.get().selection, initial_selection);
+
+    // Clicking the button navigates to Detail rather than selecting code.
+    vcx.simulate_click(screen.origin + point(px(60.), px(46.)), Default::default());
+    vcx.run_until_parked();
+    assert_eq!(document.state.get().selection, initial_selection);
+
+    // Click Back in the app bar to return to the scrollable Home view, then scroll the frame.
+    vcx.simulate_click(screen.origin + point(px(24.), px(24.)), Default::default());
+    vcx.run_until_parked();
+
+    // Before scrolling, the bottom TextField is offscreen, so clicking near the bottom hits a Text row.
+    vcx.simulate_click(
+        screen.origin + point(px(60.), px(280.)),
+        Default::default(),
+    );
+    vcx.run_until_parked();
+    let pre_scroll_focus = vcx.update(|window, cx| window.focused(cx));
+    assert_ne!(pre_scroll_focus, note_focus);
+
+    // Scroll down inside the frame: Bottom note becomes visible and focusable at the bottom of screen,
+    // while canvas pan and zoom remain untouched.
+    for _ in 0..10 {
+        vcx.simulate_event(ScrollEvent {
+            position: screen.center(),
+            delta: ScrollDelta::Pixels(point(px(0.), px(-240.))),
+            touch_phase: gpui::TouchPhase::Moved,
+            ..Default::default()
+        });
+    }
+    vcx.run_until_parked();
+    assert_eq!(app.canvas_settings(&home).pan, pan_before);
+    assert_eq!(app.canvas_settings(&home).zoom, zoom_before);
+    vcx.simulate_click(
+        screen.origin + point(px(60.), px(280.)),
+        Default::default(),
+    );
+    vcx.run_until_parked();
+    let bottom_focus = vcx.update(|window, cx| window.focused(cx));
+    assert!(
+        bottom_focus.is_some() && bottom_focus != pre_scroll_focus && bottom_focus != note_focus,
+        "scrolling the focused frame must bring the bottom TextField into view"
+    );
+
+    // Clicking the open eye button turns focus off and restores design surface controls.
+    vcx.simulate_click(eye_button, Default::default());
+    vcx.run_until_parked();
+    assert_eq!(app.canvas_settings(&home).focused_frame, None);
+    let unfocused_view = runtime.render().unwrap();
+    assert!(has_icon(&unfocused_view, "eye-closed"));
+    assert!(!has_icon(&unfocused_view, "eye"));
+    assert!(vcx.debug_bounds("studio-frame-grip").is_some());
+
+    // Design surface Ctrl+scroll now zooms again.
+    vcx.simulate_event(ScrollEvent {
+        position: screen.center(),
+        delta: ScrollDelta::Pixels(point(px(0.), px(36.))),
+        modifiers: gpui::Modifiers {
+            control: true,
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+    vcx.run_until_parked();
+    assert!(app.canvas_settings(&home).zoom > zoom_before);
+}
+
+

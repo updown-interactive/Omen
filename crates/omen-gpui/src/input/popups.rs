@@ -62,6 +62,15 @@ impl TextInput {
         cx.stop_propagation();
         cx.notify();
     }
+    pub(super) fn open_context_menu_at_caret(&mut self, cx: &mut Context<Self>) {
+        if self.code_document.is_none() {
+            return;
+        }
+        self.dismiss_popups();
+        self.context_position = Some(self.caret_popup_position());
+        self.context_index = 0;
+        cx.notify();
+    }
     pub(super) fn pointer_hover(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
         let Some(document) = &self.code_document else {
             return;
@@ -109,11 +118,11 @@ impl TextInput {
                     .state
                     .update(|state| state.actions = Default::default()),
                 "up" => document.state.update(|state| {
-                    state.completion_index = state.completion_index.saturating_sub(1)
+                    let count = state.actions.len();
+                    state.completion_index = (state.completion_index + count - 1) % count;
                 }),
                 "down" => document.state.update(|state| {
-                    state.completion_index =
-                        (state.completion_index + 1).min(state.actions.len() - 1)
+                    state.completion_index = (state.completion_index + 1) % state.actions.len();
                 }),
                 "enter" => {
                     document.emit(omen_core::EditorEvent::ApplyAction(state.completion_index));

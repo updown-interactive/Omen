@@ -11,7 +11,7 @@ use crate::{
 };
 use omen::{EditorDocument, view};
 use tools::FindBar;
-pub use tools::RenameDialog;
+pub use tools::{GoToLineDialog, RenameDialog};
 
 view! {
     pub EditorWorkspace(width: f32) {
@@ -34,6 +34,7 @@ view! {
             app.has_visual_preview(&document.path, &editing.text)
         } else { false };
         let default_mode = (app.settings).design.initial_mode;
+        let overwrite_path = document.as_ref().map(|d| d.path.clone()).unwrap_or_default();
         let mode = if visual {
             document.as_ref().and_then(|document| state.canvas(&document.path)).map_or(default_mode, |canvas| canvas.mode)
         } else { EditorMode::Code };
@@ -66,10 +67,27 @@ view! {
                     .background(colors.surface_container)
                 }
                 if document.conflict {
-                    Text(strings.changed_on_disk_save_is_blocked_to)
-                        .color(.orange)
-                        .padding(8)
-                    Button(strings.reload_from_disk) { app.reload_visible = true; }
+                    Layout {
+                        Icon("info").frame(13, 13).color(.orange)
+                        Text(strings.changed_on_disk_save_is_blocked_to)
+                            .color(.orange)
+                            .fontSize(12)
+                            .truncate()
+                        Button(strings.overwrite_disk) {
+                            app.send(Command::Overwrite(overwrite_path.clone()));
+                        }
+                        .background(colors.surface_container_high)
+                        .padding(4)
+                        Button(strings.reload_from_disk) {
+                            app.reload_visible = true;
+                        }
+                        .padding(4)
+                    }
+                    .mode(.horizontal)
+                    .spacing(8)
+                    .padding(7)
+                    .frame(.infinity, 29)
+                    .background(colors.surface_container)
                 }
                 if visual {
                     VisualToolbar(path: document.path.clone(), mode: mode, breadcrumb: breadcrumb.clone())
@@ -139,16 +157,70 @@ view! {
                     .frame(.infinity, .infinity)
                     .key(path.display().to_string())
                     .accessibilityHint("Rust code editor with line numbers. Control Space completes, F12 goes to definition. Standard selection, clipboard and undo shortcuts are supported.")
-                    .shortcut(if cfg!(target_os="macos") {"cmd-f"} else {"ctrl-f"}, move || app.open_find())
                     .shortcut(if cfg!(target_os="macos") {"cmd-l"} else {"ctrl-l"}, move || app.open_component_library())
-                Text(format!("Ln {}, Col {} · {}", cursor_line+1, cursor_column+1, format!("{}{} diagnostics · {}", if editing.secondary_selections.is_empty() {String::new()} else {format!("{} cursors · ",editing.secondary_selections.len()+1)}, editing.diagnostics.len(), app.language_status)))
-                    .font(.caption)
+                if app.problems_visible && !editing.diagnostics.is_empty() {
+                    Divider()
+                    Layout {
+                        for (index, label, is_error) in editing.diagnostics.iter().enumerate().map(|(index, diagnostic)| {
+                            let row = editing.text.byte_to_line(diagnostic.range.start) + 1;
+                            let col = editing.text.byte_to_utf16(diagnostic.range.start) - editing.text.byte_to_utf16(editing.text.line_start(row - 1)) + 1;
+                            (index, format!("{}:{row}:{col} · {}", if diagnostic.error { "Error" } else { "Warn" }, diagnostic.message), diagnostic.error)
+                        }) {
+                            Button(label) {
+                                app.reveal_diagnostic(index);
+                            }
+                                .alignment(.leading)
+                                .frame(.infinity, 24)
+                                .padding(4)
+                                .fontSize(11)
+                                .truncate()
+                                .color(if is_error { omen::Color::Red } else { omen::Color::Orange })
+                                .hoverBackground(colors.selection)
+                        }
+                    }
+                    .spacing(2)
                     .padding(4)
-                    .color(colors.on_surface_variant)
+                    .frame(.infinity, 110)
+                    .scrollable()
+                    .background(colors.surface_container)
+                }
+                Layout {
+                    Text(format!("Ln {}, Col {} · {}{}", cursor_line+1, cursor_column+1, if editing.secondary_selections.is_empty() {String::new()} else {format!("{} cursors · ",editing.secondary_selections.len()+1)}, app.language_status))
+                        .font(.caption)
+                        .color(colors.on_surface_variant)
+                        .truncate()
+                        .fill()
+                    Button(format!("{} diagnostics", editing.diagnostics.len())) {
+                        app.problems_visible = !app.problems_visible;
+                    }
+                        .fontSize(11)
+                        .padding(3)
+                        .cornerRadius(4)
+                        .color(if app.problems_visible { colors.accent_foreground } else { colors.on_surface_variant })
+                        .hoverBackground(colors.surface_container_high)
+                        .accessibilityLabel("Toggle diagnostics panel")
+                }
+                .mode(.horizontal)
+                .spacing(8)
+                .padding(4)
+                .frame(.infinity, 24)
+                .background(colors.surface_container)
         }
         .spacing(0)
         .fill()
         .frame(.infinity, .infinity)
+        .shortcut(if cfg!(target_os="macos") {"cmd-f"} else {"ctrl-f"}, move || app.open_find())
+        .shortcut(if cfg!(target_os="macos") {"cmd-alt-f"} else {"ctrl-h"}, move || app.open_replace())
+        .shortcut("f3", move || app.find_step_sync(true))
+        .shortcut("shift-f3", move || app.find_step_sync(false))
+        .shortcut(if cfg!(target_os="macos") {"cmd-g"} else {""}, move || if cfg!(target_os="macos") { app.find_step_sync(true); })
+        .shortcut(if cfg!(target_os="macos") {"cmd-shift-g"} else {""}, move || if cfg!(target_os="macos") { app.find_step_sync(false); })
+        .shortcut("ctrl-g", move || app.open_go_to_line())
+        .shortcut("f8", move || app.next_diagnostic(true))
+        .shortcut("shift-f8", move || app.next_diagnostic(false))
+        .shortcut(if cfg!(target_os="macos") {"cmd-="} else {"ctrl-="}, move || app.zoom_editor(1))
+        .shortcut(if cfg!(target_os="macos") {"cmd--"} else {"ctrl--"}, move || app.zoom_editor(-1))
+        .shortcut(if cfg!(target_os="macos") {"cmd-0"} else {"ctrl-0"}, move || app.zoom_editor(0))
     }
 }
 

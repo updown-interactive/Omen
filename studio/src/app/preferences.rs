@@ -104,6 +104,22 @@ impl StudioEnvironment {
     pub fn select_theme(&self, preset: ThemePreset) {
         self.update_settings(|settings| settings.appearance.theme = preset);
     }
+    pub fn zoom_editor(&self, delta: i8) {
+        self.update_settings(|settings| {
+            if delta == 0 {
+                let defaults = crate::settings::EditorSettings::default();
+                settings.editor.font_size = defaults.font_size;
+                settings.editor.line_height = defaults.line_height;
+            } else {
+                let next_size = (i16::from(settings.editor.font_size) + i16::from(delta))
+                    .clamp(10, 24) as u8;
+                let applied = next_size as i16 - i16::from(settings.editor.font_size);
+                settings.editor.font_size = next_size;
+                settings.editor.line_height = (i16::from(settings.editor.line_height) + applied)
+                    .clamp(i16::from(next_size) + 2, 40) as u8;
+            }
+        });
+    }
     pub(crate) fn design_grid(&self) -> Binding<bool> {
         let read = self.clone();
         let write = self.clone();

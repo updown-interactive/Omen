@@ -222,6 +222,117 @@ fn inspector_edits_the_real_buffer_saves_and_rejects_stale_selections() {
     assert!(document.state.get().reveal.is_some());
 }
 
+#[test]
+fn inspector_does_not_flicker_during_editor_typing() {
+    let root = std::env::temp_dir().join(format!("omen-inspector-typing-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(root.join("project/src")).unwrap();
+    let fixture = Fixture(root);
+    let project = fixture.0.join("project");
+    fs::write(
+        project.join("Cargo.toml"),
+        "[package]\nname=\"inspector\"\nversion=\"0.1.0\"\n",
+    )
+    .unwrap();
+    let source = "use omen::prelude::*;\nview! { Home { Layout { Text(\"Initial Label\") }.mode(.vertical) } }\n";
+    let file = project.join("src/main.rs");
+    fs::write(&file, source).unwrap();
+    let file = file.canonicalize().unwrap();
+    let app = StudioEnvironment::at(fixture.0.join("profile"));
+    let mut pool = LocalPool::new();
+    pool.spawner().spawn_local(app.receive()).unwrap();
+    app.send(Command::OpenProject(project));
+    app.send(Command::OpenFile(file.clone()));
+    app.flush();
+    pool.run_until_stalled();
+    let document = app.editor_document(file.clone());
+    let cursor = source.find("Text").unwrap();
+    document
+        .state
+        .update(|state| state.selection = cursor..cursor);
+    block_on(app.inspector_task(
+        file.clone(),
+        document.state.get().text.clone(),
+        cursor,
+    )());
+
+    let mut runtime = Runtime::new(app.editor_view().into_node());
+    let rendered = runtime.render().unwrap();
+    fn has(node: &omen::ViewNode, text: &str) -> bool {
+        if node
+            .style
+            .text_value
+            .as_ref()
+            .is_some_and(|value| value.get() == text)
+            || matches!(&node.kind, omen::ViewKind::Text(value) if value == text)
+            || matches!(&node.kind, omen::ViewKind::Button { label, .. } if label == text)
+            || matches!(&node.kind, omen::ViewKind::TextField { value, .. } if value.get() == text)
+        {
+            return true;
+        }
+        match &node.kind {
+            omen::ViewKind::Group(nodes)
+            | omen::ViewKind::Layout(nodes)
+            | omen::ViewKind::List(nodes)
+            | omen::ViewKind::Card(nodes)
+            | omen::ViewKind::Presentation {
+                children: nodes, ..
+            } => nodes.iter().any(|node| has(node, text)),
+            _ => false,
+        }
+    }
+    assert!(has(&rendered, "Inspector"));
+    assert!(has(&rendered, "Text"));
+    assert!(has(&rendered, "Initial Label"));
+    assert!(!has(&rendered, "Reading component…"));
+
+    // 1. Simulate typing in the code editor: text changed, but inspector task hasn't completed yet
+    let mut text = document.state.get().text.clone();
+    let raw = text.to_string();
+    let start = raw.find("Initial Label").unwrap();
+    text.replace(start..start + "Initial Label".len(), "Updated Label");
+    document.state.update(|state| {
+        state.text = text.clone();
+        state.selection = (start + 7)..(start + 7);
+    });
+    document.emit(EditorEvent::Edited);
+
+    // Inspector view must retain the component without flashing "Reading component…"
+    let rendered = runtime.render().unwrap();
+    assert!(has(&rendered, "Text"));
+    assert!(!has(&rendered, "Reading component…"), "Inspector must not flicker to Reading component… when typing in editor");
+
+    // 2. Simulate transient incomplete syntax while typing (e.g. unclosed quote)
+    let broken = "use omen::prelude::*;\nview! { Home { Layout { Text(\"Incomplete } }\n";
+    let mut broken_text = document.state.get().text.clone();
+    broken_text.replace(0..broken_text.len(), broken);
+    document.state.update(|state| state.text = broken_text.clone());
+    document.emit(EditorEvent::Edited);
+    block_on(app.inspector_task(file.clone(), broken_text, cursor)());
+
+    // Even with transient syntax error during typing, inspector preserves current node
+    let rendered = runtime.render().unwrap();
+    assert!(has(&rendered, "Text"), "Inspector must preserve component on transient syntax error during typing");
+    assert!(!has(&rendered, "Reading component…"));
+
+    // 3. Syntax restored
+    let valid = "use omen::prelude::*;\nview! { Home { Layout { Text(\"Completed Label\") }.mode(.vertical) } }\n";
+    let mut valid_text = document.state.get().text.clone();
+    valid_text.replace(0..valid_text.len(), valid);
+    let new_cursor = valid.find("Text").unwrap();
+    document.state.update(|state| {
+        state.text = valid_text.clone();
+        state.selection = new_cursor..new_cursor;
+    });
+    document.emit(EditorEvent::Edited);
+    block_on(app.inspector_task(file.clone(), valid_text, new_cursor)());
+
+    let rendered = runtime.render().unwrap();
+    assert!(has(&rendered, "Text"));
+    assert!(has(&rendered, "Completed Label"));
+    assert!(!has(&rendered, "Reading component…"));
+}
+
 fn input(node: &omen::ViewNode, label: &str) -> Option<omen::Binding<String>> {
     if matches!(&node.kind,omen::ViewKind::TextField { label: name, .. } if name == label) {
         return node.style.text_value.clone();

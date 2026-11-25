@@ -41,8 +41,28 @@ impl StudioEnvironment {
             .set(self.git_generation.get().wrapping_add(1));
         self.search_busy.set(false);
         self.source_control_busy.set(false);
+        self.search_index.set(0);
         self.search_results.set(SearchResults::default());
         self.source_control.set(SourceControlState::default());
+    }
+    pub fn trigger_project_search(&self) {
+        self.search_nonce.update(|n| *n += 1);
+    }
+    pub fn search_move(&self, delta: isize) {
+        let count = self.search_results.get().matches.len();
+        if count == 0 {
+            return;
+        }
+        self.search_index.update(|index| {
+            let next = (*index as isize + delta).rem_euclid(count as isize);
+            *index = next as usize;
+        });
+    }
+    pub fn activate_search_result(&self) {
+        let results = self.search_results.get();
+        if let Some(item) = results.matches.get(self.search_index.get()).cloned() {
+            self.open_search_result(item);
+        }
     }
     pub fn select_sidebar(&self, pane: SidebarPane) {
         self.update_layout(|layout| {
@@ -83,6 +103,7 @@ impl StudioEnvironment {
         {
             return;
         }
+        self.search_index.set(0);
         self.search_results
             .set(result.unwrap_or_else(|message| SearchResults {
                 root: Some(selected_root),

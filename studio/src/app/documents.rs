@@ -5,9 +5,43 @@ impl StudioEnvironment {
     pub fn close_project(&self) {
         self.send(Command::CloseProject);
     }
+    pub fn close_active_document(&self) {
+        if let Some(path) = self.workspace.get().active_file {
+            self.send(Command::Close(path));
+        }
+    }
+    pub fn cycle_document(&self, forward: bool) {
+        let state = self.workspace.get();
+        let count = state.documents.len();
+        if count <= 1 {
+            return;
+        }
+        let current = state
+            .active_file
+            .as_ref()
+            .and_then(|active| state.documents.iter().position(|doc| &doc.path == active))
+            .unwrap_or(0);
+        let next = if forward {
+            (current + 1) % count
+        } else {
+            (current + count - 1) % count
+        };
+        self.send(Command::Select(state.documents[next].path.clone()));
+    }
     pub fn save_active(&self) {
         if let Some(path) = self.workspace.get().active_file {
-            self.send(Command::Save(path));
+            let conflict = self
+                .workspace
+                .get()
+                .documents
+                .iter()
+                .find(|d| d.path == path)
+                .is_some_and(|d| d.conflict);
+            if conflict {
+                self.reload_visible.set(true);
+            } else {
+                self.send(Command::Save(path));
+            }
         }
     }
     pub(crate) fn editor_blur(&self, path: &std::path::Path) {

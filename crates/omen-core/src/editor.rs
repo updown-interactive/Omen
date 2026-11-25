@@ -396,6 +396,10 @@ pub struct EditorState {
     pub selection_request: Option<Range<usize>>,
     /// One-shot selection/reveal request from find, diagnostics or navigation.
     pub reveal: Option<Range<usize>>,
+    /// Highlighted search matches in the current document.
+    pub search_matches: Arc<Vec<Range<usize>>>,
+    /// Currently active search match range.
+    pub active_search_match: Option<Range<usize>>,
 }
 /// Events delivered from the code control without materializing full strings.
 #[derive(Clone, Debug)]

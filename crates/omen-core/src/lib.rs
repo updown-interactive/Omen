@@ -360,6 +360,8 @@ pub struct PreviewStyle {
     pub outline: Option<Color>,
     /// Show the design outline persistently when selected.
     pub selected: bool,
+    /// Disable design and interactive controls for an unfocused frame.
+    pub inert: bool,
 }
 /// Explicit style overrides. Unset values inherit the backend's defaults.
 #[derive(Clone, Debug, Default, PartialEq)]

@@ -308,6 +308,7 @@ pub struct CanvasSettings {
     pub mode: EditorMode,
     pub frames: Vec<VisualFrame>,
     pub active_frame: u64,
+    pub focused_frame: Option<u64>,
     pub interact: bool,
     pub zoom: f32,
     pub fit_to_view: bool,
@@ -327,6 +328,7 @@ impl CanvasSettings {
             mode,
             frames: vec![VisualFrame::new(1, profile)],
             active_frame: 1,
+            focused_frame: None,
             interact: false,
             zoom: 100.,
             fit_to_view: true,
@@ -514,6 +516,9 @@ impl CanvasSettings {
         if !ids.contains(&self.active_frame) {
             self.active_frame = self.frames.first().map_or(0, |frame| frame.id);
         }
+        if self.focused_frame.is_some_and(|id| !ids.contains(&id)) {
+            self.focused_frame = None;
+        }
         if let Some(max) = ids.into_iter().max() {
             self.next_id = self.next_id.max(max.saturating_add(1));
         }
@@ -604,7 +609,7 @@ impl VisualTree {
         Ok(previews)
     }
 
-    pub(crate) fn declaration_name(&self) -> Option<&str> {
+    pub fn declaration_name(&self) -> Option<&str> {
         self.nodes.first()?.path.first().map(String::as_str)
     }
 

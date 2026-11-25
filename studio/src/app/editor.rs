@@ -95,6 +95,9 @@ impl StudioEnvironment {
             if let (Some(language), Some(root)) = (&self.language, workspace.root) {
                 language.document(root, path.clone(), state.text, state.selection.end);
             }
+            if self.find_visible.get() {
+                self.refresh_find_matches();
+            }
             return;
         }
         match event {
@@ -107,7 +110,7 @@ impl StudioEnvironment {
                 return;
             }
             EditorEvent::Rename => {
-                self.rename_visible.set(true);
+                self.open_rename();
                 return;
             }
             EditorEvent::ApplyAction(index) => {
@@ -394,6 +397,7 @@ impl StudioEnvironment {
     }
     pub fn open_find(&self) {
         self.find_visible.set(true);
+        self.replace_focus.set(false);
         self.find_focus.set(true);
         if let Some(path) = self.workspace.get().active_file {
             let model = self.editor_states.borrow().get(&path).cloned();
@@ -407,12 +411,91 @@ impl StudioEnvironment {
                 }
             }
         }
+        self.refresh_find_matches();
     }
-    pub async fn find_next(&self) {
+    pub fn open_replace(&self) {
+        self.open_find();
+        self.find_focus.set(false);
+        self.replace_focus.set(true);
+    }
+    pub fn close_find(&self) {
+        self.find_visible.set(false);
+        self.find_focus.set(false);
+        self.replace_focus.set(false);
+        if let Some(path) = self.workspace.get().active_file
+            && let Some(model) = self.editor_states.borrow().get(&path).cloned()
+        {
+            model.update(|state| {
+                state.search_matches = Arc::default();
+                state.active_search_match = None;
+            });
+        }
+        self.focus_editor();
+    }
+    pub fn refresh_find_matches(&self) {
         let needle = self.find_text.get();
+        let case_sensitive = self.find_case_sensitive.get();
+        let whole_word = self.find_whole_word.get();
+        let Some(path) = self.workspace.get().active_file else {
+            self.find_match_count.set(0);
+            self.find_match_index.set(None);
+            return;
+        };
+        let document = self.editor_document(path);
+        let state = document.state.get();
         if needle.is_empty() {
+            self.find_match_count.set(0);
+            self.find_match_index.set(None);
+            document.state.update(|state| {
+                state.search_matches = Arc::default();
+                state.active_search_match = None;
+            });
             return;
         }
+        let source = state.text.to_string();
+        let matches = collect_find_matches(&source, &needle, case_sensitive, whole_word);
+        let count = matches.len();
+        let active_index = matches.iter().position(|range| *range == state.selection);
+        let active_match = active_index.map(|idx| matches[idx].clone());
+        self.find_match_count.set(count);
+        self.find_match_index.set(active_index.map(|idx| idx + 1));
+        document.state.update(|state| {
+            state.search_matches = Arc::new(matches);
+            state.active_search_match = active_match;
+        });
+    }
+    pub fn find_step_sync(&self, forward: bool) {
+        let needle = self.find_text.get();
+        if needle.is_empty() {
+            self.refresh_find_matches();
+            return;
+        }
+        let case_sensitive = self.find_case_sensitive.get();
+        let whole_word = self.find_whole_word.get();
+        let Some(path) = self.workspace.get().active_file else {
+            return;
+        };
+        let document = self.editor_document(path);
+        let state = document.state.get();
+        let source = state.text.to_string();
+        let (matches, picked) =
+            compute_find(&source, &needle, case_sensitive, whole_word, &state.selection, forward);
+        self.apply_find_result(&document, matches, picked);
+    }
+    pub async fn find_next(&self) {
+        self.find_step(true).await;
+    }
+    pub async fn find_previous(&self) {
+        self.find_step(false).await;
+    }
+    async fn find_step(&self, forward: bool) {
+        let needle = self.find_text.get();
+        if needle.is_empty() {
+            self.refresh_find_matches();
+            return;
+        }
+        let case_sensitive = self.find_case_sensitive.get();
+        let whole_word = self.find_whole_word.get();
         let Some(path) = self.workspace.get().active_file else {
             return;
         };
@@ -420,32 +503,80 @@ impl StudioEnvironment {
         let state = document.state.get();
         let text = state.text.clone();
         let expected = state.text;
-        let start = state.selection.end;
+        let selection = state.selection;
         let (tx, rx) = futures::channel::oneshot::channel();
         let query = needle.clone();
         let spawned = std::thread::Builder::new()
             .name("omen-find".into())
             .spawn(move || {
-                let found = text
-                    .slice(start..)
-                    .find(&query)
-                    .map(|offset| start + offset)
-                    .or_else(|| text.slice(..start).find(&query));
-                let _ = tx.send(found);
+                let source = text.to_string();
+                let result =
+                    compute_find(&source, &query, case_sensitive, whole_word, &selection, forward);
+                let _ = tx.send(result);
             });
         if spawned.is_err() {
             self.language_status
                 .set("Could not start text search".into());
             return;
         }
-        if let Ok(Some(start)) = rx.await
+        if let Ok((matches, picked)) = rx.await
             && document.state.get().text.same_snapshot(&expected)
             && self.find_text.get() == needle
+            && self.find_case_sensitive.get() == case_sensitive
+            && self.find_whole_word.get() == whole_word
         {
-            document.state.update(|state| {
-                state.selection = start..start + needle.len();
-                state.reveal = Some(state.selection.clone());
-            });
+            self.apply_find_result(&document, matches, picked);
+        }
+    }
+    fn apply_find_result(
+        &self,
+        document: &EditorDocument,
+        matches: Vec<std::ops::Range<usize>>,
+        picked: Option<usize>,
+    ) {
+        let count = matches.len();
+        let active = picked.map(|idx| matches[idx].clone());
+        self.find_match_count.set(count);
+        self.find_match_index.set(picked.map(|idx| idx + 1));
+        document.state.update(|state| {
+            state.search_matches = Arc::new(matches);
+            state.active_search_match = active.clone();
+            if let Some(range) = active {
+                state.selection = range.clone();
+                state.selection_request = Some(range);
+            }
+        });
+    }
+    pub fn replace_match_sync(&self, all: bool) {
+        let needle = self.find_text.get();
+        if needle.is_empty() {
+            return;
+        }
+        let case_sensitive = self.find_case_sensitive.get();
+        let whole_word = self.find_whole_word.get();
+        let replacement = self.replacement_text.get();
+        let Some(path) = self.workspace.get().active_file else {
+            return;
+        };
+        let document = self.editor_document(path.clone());
+        let state = document.state.get();
+        if !all && !selection_matches(&state.text, &state.selection, &needle, case_sensitive, whole_word)
+        {
+            self.find_step_sync(true);
+            return;
+        }
+        let (text, cursor) = compute_replace(
+            state.text,
+            state.selection,
+            &needle,
+            &replacement,
+            case_sensitive,
+            whole_word,
+            all,
+        );
+        self.apply_replace_result(&path, &document, text, cursor);
+        if !all {
+            self.find_step_sync(true);
         }
     }
     pub async fn replace_match(&self, all: bool) {
@@ -453,6 +584,8 @@ impl StudioEnvironment {
         if needle.is_empty() {
             return;
         }
+        let case_sensitive = self.find_case_sensitive.get();
+        let whole_word = self.find_whole_word.get();
         let replacement = self.replacement_text.get();
         let Some(path) = self.workspace.get().active_file else {
             return;
@@ -460,7 +593,8 @@ impl StudioEnvironment {
         let document = self.editor_document(path.clone());
         let state = document.state.get();
         let expected = state.text.clone();
-        if !all && state.text.slice(state.selection.clone()) != needle {
+        if !all && !selection_matches(&state.text, &state.selection, &needle, case_sensitive, whole_word)
+        {
             self.find_next().await;
             return;
         }
@@ -468,36 +602,43 @@ impl StudioEnvironment {
         let spawned = std::thread::Builder::new()
             .name("omen-replace".into())
             .spawn(move || {
-                let mut text = state.text;
-                if all {
-                    let offsets = text
-                        .to_string()
-                        .match_indices(&needle)
-                        .map(|(offset, _)| offset)
-                        .collect::<Vec<_>>();
-                    for offset in offsets.into_iter().rev() {
-                        text.replace(offset..offset + needle.len(), &replacement);
-                    }
-                } else {
-                    text.replace(state.selection, &replacement);
-                }
-                let _ = tx.send(text);
+                let result = compute_replace(
+                    state.text,
+                    state.selection,
+                    &needle,
+                    &replacement,
+                    case_sensitive,
+                    whole_word,
+                    all,
+                );
+                let _ = tx.send(result);
             });
         if spawned.is_err() {
             self.language_status.set("Could not start replace".into());
             return;
         }
-        if let Ok(text) = rx.await
+        if let Ok((text, cursor)) = rx.await
             && document.state.get().text.same_snapshot(&expected)
         {
-            document.state.update(|state| {
-                state.text = text;
-                let cursor = state.selection.start.min(state.text.len());
-                state.selection = cursor..cursor;
-                state.reveal = Some(cursor..cursor);
-            });
-            self.editor_event(&path, EditorEvent::Edited);
+            self.apply_replace_result(&path, &document, text, cursor);
+            if !all {
+                self.find_next().await;
+            }
         }
+    }
+    fn apply_replace_result(
+        &self,
+        path: &PathBuf,
+        document: &EditorDocument,
+        text: omen::TextSnapshot,
+        cursor: usize,
+    ) {
+        document.state.update(|state| {
+            state.text = text;
+            state.selection = cursor..cursor;
+            state.selection_request = Some(cursor..cursor);
+        });
+        self.editor_event(path, EditorEvent::Edited);
     }
     pub fn reveal_diagnostic(&self, index: usize) {
         let Some(path) = self.workspace.get().active_file else {
@@ -513,6 +654,41 @@ impl StudioEnvironment {
             });
         }
     }
+    pub fn next_diagnostic(&self, forward: bool) {
+        let Some(path) = self.workspace.get().active_file else {
+            return;
+        };
+        let document = self.editor_document(path);
+        let state = document.state.get();
+        if state.diagnostics.is_empty() {
+            return;
+        }
+        let cursor = state.selection.end;
+        let target = if forward {
+            state
+                .diagnostics
+                .iter()
+                .position(|d| d.range.start > cursor)
+                .unwrap_or(0)
+        } else {
+            state
+                .diagnostics
+                .iter()
+                .rposition(|d| d.range.end < state.selection.start)
+                .unwrap_or(state.diagnostics.len() - 1)
+        };
+        self.reveal_diagnostic(target);
+    }
+    pub fn open_rename(&self) {
+        if let Some(path) = self.workspace.get().active_file {
+            let state = self.editor_document(path).state.get();
+            if let Some(symbol) = symbol_at_cursor(&state.text, state.selection.end) {
+                self.rename_text.set(symbol);
+            }
+        }
+        self.rename_visible.set(true);
+        self.rename_focus.set(true);
+    }
     pub fn rename_symbol(&self) {
         let name = self.rename_text.get();
         if name.trim().is_empty() {
@@ -521,7 +697,45 @@ impl StudioEnvironment {
         if let Some(path) = self.workspace.get().active_file {
             self.language_query(path, lsp::Query::Rename(name));
             self.rename_visible.set(false);
+            self.rename_focus.set(false);
         }
+    }
+    pub fn open_go_to_line(&self) {
+        self.goto_text.set(String::new());
+        self.goto_visible.set(true);
+        self.goto_focus.set(true);
+    }
+    pub fn go_to_line(&self) {
+        let query = self.goto_text.get();
+        let trimmed = query.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        let mut parts = trimmed.split(':');
+        let Ok(line) = parts.next().unwrap_or_default().trim().parse::<usize>() else {
+            return;
+        };
+        let column = parts
+            .next()
+            .and_then(|part| part.trim().parse::<usize>().ok())
+            .unwrap_or(1);
+        let Some(path) = self.workspace.get().active_file else {
+            return;
+        };
+        let document = self.editor_document(path);
+        document.state.update(|state| {
+            let row = line.saturating_sub(1).min(state.text.line_count().saturating_sub(1));
+            let start = state.text.line_start(row);
+            let max_end = start + state.text.line(row).len();
+            let offset = state
+                .text
+                .utf16_to_byte(state.text.byte_to_utf16(start) + column.saturating_sub(1))
+                .min(max_end);
+            state.selection = offset..offset;
+            state.reveal = Some(offset..offset);
+        });
+        self.goto_visible.set(false);
+        self.goto_focus.set(false);
     }
     pub fn code_action(&self, index: usize) {
         let Some(action) = self.code_actions.get().get(index).cloned() else {
@@ -543,4 +757,159 @@ impl StudioEnvironment {
         }
         self.code_actions.set(Vec::new());
     }
+}
+
+fn is_word_char(ch: char) -> bool {
+    ch.is_alphanumeric() || ch == '_'
+}
+
+fn compute_find(
+    source: &str,
+    needle: &str,
+    case_sensitive: bool,
+    whole_word: bool,
+    selection: &std::ops::Range<usize>,
+    forward: bool,
+) -> (Vec<std::ops::Range<usize>>, Option<usize>) {
+    let matches = collect_find_matches(source, needle, case_sensitive, whole_word);
+    let picked = if matches.is_empty() {
+        None
+    } else if forward {
+        matches
+            .iter()
+            .position(|range| range.start >= selection.end)
+            .or(Some(0))
+    } else {
+        matches
+            .iter()
+            .rposition(|range| range.end <= selection.start)
+            .or_else(|| Some(matches.len() - 1))
+    };
+    (matches, picked)
+}
+
+fn selection_matches(
+    text: &omen::TextSnapshot,
+    selection: &std::ops::Range<usize>,
+    needle: &str,
+    case_sensitive: bool,
+    whole_word: bool,
+) -> bool {
+    let selected = text.slice(selection.clone());
+    let same = if case_sensitive {
+        selected == needle
+    } else {
+        selected.to_lowercase() == needle.to_lowercase()
+    };
+    same && (!whole_word || is_word_boundary(&text.to_string(), selection.start, selection.end))
+}
+
+fn compute_replace(
+    mut text: omen::TextSnapshot,
+    selection: std::ops::Range<usize>,
+    needle: &str,
+    replacement: &str,
+    case_sensitive: bool,
+    whole_word: bool,
+    all: bool,
+) -> (omen::TextSnapshot, usize) {
+    if all {
+        let source = text.to_string();
+        let matches = collect_find_matches(&source, needle, case_sensitive, whole_word);
+        for range in matches.into_iter().rev() {
+            text.replace(range, replacement);
+        }
+        let cursor = selection.start.min(text.len());
+        (text, cursor)
+    } else {
+        let start = selection.start;
+        text.replace(selection, replacement);
+        let cursor = (start + replacement.len()).min(text.len());
+        (text, cursor)
+    }
+}
+
+fn is_word_boundary(text: &str, start: usize, end: usize) -> bool {
+    let before = text[..start].chars().next_back();
+    let after = text[end..].chars().next();
+    !before.is_some_and(is_word_char) && !after.is_some_and(is_word_char)
+}
+
+fn symbol_at_cursor(text: &omen::TextSnapshot, cursor: usize) -> Option<String> {
+    let row = text.byte_to_line(cursor);
+    let line_start = text.line_start(row);
+    let line = text.line(row);
+    let local = cursor.saturating_sub(line_start).min(line.len());
+    let mut start = local;
+    while start > 0 {
+        let Some(ch) = line[..start].chars().next_back() else {
+            break;
+        };
+        if !is_word_char(ch) {
+            break;
+        }
+        start -= ch.len_utf8();
+    }
+    let mut end = local;
+    while end < line.len() {
+        let Some(ch) = line[end..].chars().next() else {
+            break;
+        };
+        if !is_word_char(ch) {
+            break;
+        }
+        end += ch.len_utf8();
+    }
+    (start < end).then(|| line[start..end].to_string())
+}
+
+fn collect_find_matches(
+    source: &str,
+    needle: &str,
+    case_sensitive: bool,
+    whole_word: bool,
+) -> Vec<std::ops::Range<usize>> {
+    if needle.is_empty() || source.is_empty() {
+        return Vec::new();
+    }
+    let raw_ranges: Vec<std::ops::Range<usize>> = if case_sensitive {
+        source
+            .match_indices(needle)
+            .map(|(start, _)| start..start + needle.len())
+            .collect()
+    } else if source.is_ascii() && needle.is_ascii() {
+        let lower_source = source.to_ascii_lowercase();
+        let lower_needle = needle.to_ascii_lowercase();
+        lower_source
+            .match_indices(&lower_needle)
+            .map(|(start, _)| start..start + lower_needle.len())
+            .collect()
+    } else {
+        let lower_needle = needle.to_lowercase();
+        let mut lower_source = String::with_capacity(source.len());
+        let mut byte_map = Vec::with_capacity(source.len() + 1);
+        for (orig_start, ch) in source.char_indices() {
+            for lower_ch in ch.to_lowercase() {
+                let mut buf = [0u8; 4];
+                let encoded = lower_ch.encode_utf8(&mut buf);
+                for _ in 0..encoded.len() {
+                    byte_map.push(orig_start);
+                }
+                lower_source.push(lower_ch);
+            }
+        }
+        byte_map.push(source.len());
+        lower_source
+            .match_indices(&lower_needle)
+            .filter_map(|(start, _)| {
+                let orig_start = *byte_map.get(start)?;
+                let orig_end = *byte_map.get(start + lower_needle.len())?;
+                (orig_start < orig_end).then_some(orig_start..orig_end)
+            })
+            .collect()
+    };
+    raw_ranges
+        .into_iter()
+        .filter(|range| !whole_word || is_word_boundary(source, range.start, range.end))
+        .collect()
 }

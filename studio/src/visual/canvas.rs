@@ -50,6 +50,9 @@ view! {
         let measurement = canvas_measurement(app.clone(), path.clone(), $measured.into(), $restored.into());
         let viewport = if measured[0] > 0. && measured[1] > 0. { measured } else { size };
         let canvas = app.canvas_settings(&path);
+        let surface_focused = canvas
+            .focused_frame
+            .is_some_and(|id| canvas.frames.iter().any(|frame| frame.id == id));
         let colors = app.colors();
         let zoom = canvas.visible_zoom(viewport);
         let identity = text.identity();
@@ -141,8 +144,8 @@ view! {
         .fill()
         .frame(.infinity, .infinity)
         .background(colors.surface_container)
-        .shortcut(if cfg!(target_os = "macos") { "cmd-z" } else { "ctrl-z" }, move || app.visual_undo(&undo_shortcut, false))
-        .shortcut(if cfg!(target_os = "macos") { "cmd-shift-z" } else { "ctrl-shift-z" }, move || app.visual_undo(&redo_shortcut, true))
+        .shortcut(if !surface_focused { if cfg!(target_os = "macos") { "cmd-z" } else { "ctrl-z" } } else { "" }, move || if !surface_focused { app.visual_undo(&undo_shortcut, false); })
+        .shortcut(if !surface_focused { if cfg!(target_os = "macos") { "cmd-shift-z" } else { "ctrl-shift-z" } } else { "" }, move || if !surface_focused { app.visual_undo(&redo_shortcut, true); })
     }
 }
 
@@ -167,16 +170,21 @@ view! {
         let library_visible: Binding<bool> = $library.into();
         let insertion_position: Binding<Option<omen::FlowPlacement>> = $insertion.into();
         let position = insertion.filter(|_| parent_is_flow(&tree, target));
-        let guide = if library && !canvas.interact { render::InsertionGuide::new(&tree, target, position) } else { None };
+        let focused_frame = canvas
+            .focused_frame
+            .filter(|id| canvas.frames.iter().any(|frame| frame.id == *id));
+        let surface_focused = focused_frame.is_some();
+        let design = !canvas.interact && !surface_focused;
+        let guide = if library && design { render::InsertionGuide::new(&tree, target, position) } else { None };
         let active_frame = canvas.frames.iter().find(|frame| frame.id == canvas.active_frame).cloned();
         let active_width = active_frame.as_ref().map(|frame| f32::from(frame.width));
         let layout_label = guide.zip(active_width).map(|(guide, width)| guide.label(&tree, width));
         let width = active_width.unwrap_or(0.);
         let scale = canvas.visible_zoom(viewport) / 100.;
         let origin = canvas.origin(viewport, scale);
-        let frames: Vec<_> = canvas.frames.iter().filter(|frame| !measured || canvas.interact || frame.is_visible(viewport, scale, origin)).cloned().collect();
+        let frames: Vec<_> = canvas.frames.iter().filter(|frame| !measured || canvas.interact || surface_focused || frame.is_visible(viewport, scale, origin)).cloned().collect();
         let select = app.visual_selector(path.clone(), identity, tree.clone());
-        let floating_tree = if !canvas.interact && viewport[0] >= 120. && viewport[1] >= 54.
+        let floating_tree = if design && viewport[0] >= 120. && viewport[1] >= 54.
             && let Some(frame) = active_frame.as_ref()
         {
             Some(view_tree_cache.view(&tree, frame, selected, &select, viewport))
@@ -188,7 +196,6 @@ view! {
         let recovery_path = path.clone();
         let recovery_app = app.clone();
         let frame_app = app.clone();
-        let design = !canvas.interact;
         let previous = target.checked_sub(1);
         let next = (target + 1 < tree.nodes.len()).then_some(target + 1);
         let parent = tree.parent(target);
@@ -204,13 +211,15 @@ view! {
         Layout {
             if canvas.interact {
                 Text("Interactive simulation · project actions unavailable").font(.caption).padding(8)
+            } else if surface_focused {
+                Text("Frame focused · design surface controls paused").font(.caption).padding(8)
             } else {
                 Composition(path: path.clone(), identity: identity, tree: tree.clone(), target: target, width: width, compact: viewport[0] < 475., visible: library_visible.clone(), insertion: insertion_position.clone(), layout_label: layout_label.clone())
             }
             if canvas.frames.is_empty() {
                 Text("Add a frame to preview this view.").padding(18)
             } else {
-                PreviewSurface(navigation: navigation.clone(), measurement: measurement.clone(), background: colors.canvas, grid: grid, grid_transform: [origin[0], origin[1], scale], content: view! {
+                PreviewSurface(navigation: (!surface_focused).then_some(navigation.clone()), measurement: measurement.clone(), background: colors.canvas, grid: grid, grid_transform: [origin[0], origin[1], scale], content: view! {
                     Layout {
                         if offscreen {
                             Layout {
@@ -234,6 +243,8 @@ view! {
                                 content: AnyView::new(FrameCard {
                                     frame: frame.clone(),
                                     active: frame.id == canvas.active_frame,
+                                    focused: focused_frame == Some(frame.id),
+                                    surface_focused,
                                     path: path.clone(),
                                     tree: tree.clone(),
                                     identity,
@@ -663,7 +674,7 @@ fn canvas_measurement(
 }
 
 struct PreviewSurface {
-    navigation: Binding<omen::PreviewGesture>,
+    navigation: Option<Binding<omen::PreviewGesture>>,
     measurement: Binding<[f32; 2]>,
     background: omen::Color,
     grid: Option<omen::Color>,
@@ -678,7 +689,7 @@ impl View for PreviewSurface {
             .background(self.background)
             .into_node();
         let preview = node.style.preview_mut();
-        preview.navigation = Some(self.navigation);
+        preview.navigation = self.navigation;
         preview.grid = self.grid;
         preview.grid_transform = Some(self.grid_transform);
         preview.viewport_size = Some(self.measurement);
@@ -713,21 +724,26 @@ fn frame_selection(app: StudioEnvironment, path: PathBuf, id: u64) -> omen::Acti
 }
 
 struct FrameGrip {
-    drag: omen::PreviewFrameDrag,
+    drag: Option<omen::PreviewFrameDrag>,
     content: AnyView,
 }
 
 impl View for FrameGrip {
     fn into_node(self) -> ViewNode {
+        let hint = if self.drag.is_some() {
+            "Drag to move frame"
+        } else {
+            "Frame drag disabled"
+        };
         let mut node = Layout::new()
             .child(omen::Text::new("⠿"))
             .child(self.content)
             .mode(omen::LayoutMode::Horizontal)
             .spacing(6)
             .frame(f64::INFINITY, 20.)
-            .accessibility_hint("Drag to move frame")
+            .accessibility_hint(hint)
             .into_node();
-        node.style.preview_mut().frame_drag = Some(self.drag);
+        node.style.preview_mut().frame_drag = self.drag;
         node
     }
 }
@@ -764,6 +780,7 @@ struct FrameRenderKey {
     locale: String,
     selected: Option<usize>,
     interact: bool,
+    inert: bool,
     guide: Option<render::InsertionGuide>,
 }
 
@@ -775,6 +792,7 @@ fn cached_frame_content(
     identity: u64,
     selected: Option<usize>,
     interact: bool,
+    inert: bool,
     guide: Option<render::InsertionGuide>,
     tree: &Arc<VisualTree>,
     build: impl FnOnce(bool) -> AnyView,
@@ -789,6 +807,7 @@ fn cached_frame_content(
         locale: frame.locale.clone(),
         selected,
         interact,
+        inert,
         guide,
     };
     let mut cache = cache.borrow_mut();
@@ -807,7 +826,7 @@ fn cached_frame_content(
 }
 
 view! {
-    FrameCard(frame: VisualFrame, active: bool, path: PathBuf, tree: Arc<VisualTree>, identity: u64, marked: bool, selected: Option<usize>, select: render::Select, interact: bool, scale: f32, viewport: [f32; 2], reorder: render::Reorder, guide: Option<render::InsertionGuide>) {
+    FrameCard(frame: VisualFrame, active: bool, focused: bool, surface_focused: bool, path: PathBuf, tree: Arc<VisualTree>, identity: u64, marked: bool, selected: Option<usize>, select: render::Select, interact: bool, scale: f32, viewport: [f32; 2], reorder: render::Reorder, guide: Option<render::InsertionGuide>) {
         @Environment app: StudioEnvironment
         @State options = false
         @State interaction: render::InteractivePreview = Default::default()
@@ -820,19 +839,32 @@ view! {
             select_node(index);
             activate_frame.invoke();
         });
+        let frame_interactive = interact || focused;
+        let inert = surface_focused && !focused;
+        let can_drag = !interact && !surface_focused;
         let preview_session = interaction;
         let cache = render_cache;
-        let content = cached_frame_content(&cache, &frame, identity, selected, interact, guide, &tree, |structure_changed| {
+        let content = cached_frame_content(&cache, &frame, identity, selected, frame_interactive, inert, guide, &tree, |structure_changed| {
             if structure_changed { preview_session.reset(); }
-            render::frame_content(&tree, &frame, selected, select_component, interact.then_some(&preview_session), &reorder, guide)
+            let mode = if frame_interactive {
+                render::FrameInteraction::Interactive(&preview_session)
+            } else if inert {
+                render::FrameInteraction::Inert
+            } else {
+                render::FrameInteraction::Design
+            };
+            render::frame_content(&tree, &frame, selected, select_component, mode, &reorder, guide)
         });
         let colors = app.colors();
         let visible: Binding<bool> = $options.into();
-        let drag = omen::PreviewFrameDrag {
+        let focus_app = app.clone();
+        let focus_path = path.clone();
+        let drag_path = path.clone();
+        let drag = can_drag.then(|| omen::PreviewFrameDrag {
             select: select_frame,
-            position: app.frame_position(path.clone(), id, frame.position, viewport),
+            position: app.frame_position(drag_path, id, frame.position, viewport),
             scale,
-        };
+        });
         let caption = if marked {
             format!("@Design · {} · {} × {}", tree.declaration_name().unwrap_or_default(), frame.width, frame.height)
         } else {
@@ -845,15 +877,42 @@ view! {
         Layout {
             Layout {
                 Layout {
-                    FrameGrip(drag: drag.clone(), content: view! {
+                    FrameGrip(drag: drag, content: view! {
                         Text(frame.name.clone())
-                            .weight(if active { omen::Weight::Semibold } else { omen::Weight::Regular })
-                            .color(if active { colors.accent_foreground } else { colors.on_surface }).truncate().fill()
+                            .weight(if active || focused { omen::Weight::Semibold } else { omen::Weight::Regular })
+                            .color(if active || focused { colors.accent_foreground } else { colors.on_surface }).truncate().fill()
                     }).fill()
                     Button("⋯") { options = !options; }
                         .frame(23,20).cornerRadius(4).hoverBackground(colors.surface_container)
                         .accessibilityLabel("Frame settings")
                         .popover(visible, move || menu::panel(view! { FrameSettings(path: path.clone(), frame: settings_frame.clone()).key(key.clone()) }))
+                    Layout {
+                        Icon(if focused { "eye" } else { "eye-closed" })
+                            .frame(14, 14)
+                    }
+                    .frame(23, 20)
+                    .alignment(.center)
+                    .cornerRadius(4)
+                    .background(if focused { colors.selection } else { colors.canvas })
+                    .color(if focused { colors.on_selection } else { colors.on_surface_variant })
+                    .hoverBackground(if focused { colors.selection } else { colors.surface_container })
+                    .onTap(move || {
+                        focus_app.update_canvas(&focus_path, |canvas| {
+                            canvas.focused_frame = if canvas.focused_frame == Some(id) {
+                                None
+                            } else {
+                                canvas.active_frame = id;
+                                Some(id)
+                            };
+                        });
+                    })
+                    .accessibilityRole(.button)
+                    .accessibilityLabel(if focused { "Unfocus frame" } else { "Focus frame" })
+                    .accessibilityHint(if focused {
+                        "Return to design surface controls"
+                    } else {
+                        "Focus mouse and scroll controls on this frame"
+                    })
                 }
                 .mode(.horizontal)
                 .spacing(5)

@@ -167,12 +167,19 @@ pub fn diagnostics(tree: &VisualTree) -> Vec<String> {
     warnings.into_iter().collect()
 }
 
+#[derive(Clone, Copy)]
+pub enum FrameInteraction<'a> {
+    Design,
+    Interactive(&'a InteractivePreview),
+    Inert,
+}
+
 pub fn frame_content(
     tree: &VisualTree,
     frame: &VisualFrame,
     selection: Option<usize>,
     select: Select,
-    interaction: Option<&InteractivePreview>,
+    interaction: FrameInteraction<'_>,
     reorder: &Reorder,
     guide: Option<InsertionGuide>,
 ) -> AnyView {
@@ -190,7 +197,11 @@ pub fn frame_content(
                 index,
                 selection,
                 &select,
-                interaction.map(|session| (session, 0)),
+                match interaction {
+                    FrameInteraction::Design => FrameNodeMode::Design,
+                    FrameInteraction::Interactive(session) => FrameNodeMode::Interactive(session, 0),
+                    FrameInteraction::Inert => FrameNodeMode::Inert,
+                },
                 &placement,
                 f32::from(frame.width),
                 guide,
@@ -199,7 +210,11 @@ pub fn frame_content(
             )
         })
         .collect();
-    let children = if let Some(interaction) = interaction.filter(|_| {
+    let interactive = match interaction {
+        FrameInteraction::Interactive(session) => Some(session),
+        _ => None,
+    };
+    let children = if let Some(interaction) = interactive.filter(|_| {
         tree.nodes
             .iter()
             .filter_map(|node| node.preview_route.as_ref())
@@ -251,6 +266,7 @@ pub fn frame_content(
     let preview = node.style.preview_mut();
     preview.width = Some(f32::from(frame.width));
     preview.safe_area = frame.safe_area;
+    preview.inert = matches!(interaction, FrameInteraction::Inert);
     AnyView::new(node)
 }
 
@@ -297,12 +313,21 @@ fn preview_navigation(
                 .child(page.key(entry.id))
                 .frame(frame.width, frame.height)
                 .background(background);
-            Ok(match theme {
+            let mut node = match theme {
                 Some(theme) => screen.theme(theme).into_node(),
                 None => screen.into_node(),
-            })
+            };
+            node.style.preview_mut().width = Some(f32::from(frame.width));
+            Ok(node)
         },
     )))
+}
+
+#[derive(Clone, Copy)]
+enum FrameNodeMode<'a> {
+    Design,
+    Interactive(&'a InteractivePreview, u64),
+    Inert,
 }
 
 fn render_node(
@@ -310,7 +335,7 @@ fn render_node(
     index: usize,
     selection: Option<usize>,
     select: &Select,
-    interaction: Option<(&InteractivePreview, u64)>,
+    mode: FrameNodeMode<'_>,
     reorder: &Reorder,
     width: f32,
     guide: Option<InsertionGuide>,
@@ -345,7 +370,7 @@ fn render_node(
                         child,
                         selection,
                         select,
-                        interaction,
+                        mode,
                         reorder,
                         width,
                         guide,
@@ -356,8 +381,12 @@ fn render_node(
                 .collect();
         }
     }
-    if let Some((session, visit)) = interaction {
-        return interactive_node(view, tree, index, session, visit);
+    match mode {
+        FrameNodeMode::Interactive(session, visit) => {
+            return interactive_node(view, tree, index, session, visit);
+        }
+        FrameNodeMode::Inert => return view.into_node(),
+        FrameNodeMode::Design => {}
     }
     let select = select.clone();
     let mut view = view.on_tap(move || select(index)).into_node();
@@ -507,7 +536,7 @@ fn render_destination(
             index,
             None,
             &select,
-            Some((session, entry.id)),
+            FrameNodeMode::Interactive(session, entry.id),
             reorder,
             width,
             None,
@@ -885,15 +914,23 @@ mod tests {
         };
         let session = InteractivePreview::default();
         let frame = VisualFrame::new(1, Profile::IPhone);
-        let edit =
-            frame_content(tree, &frame, None, Rc::new(|_| {}), None, &reorder, None).into_node();
+        let edit = frame_content(
+            tree,
+            &frame,
+            None,
+            Rc::new(|_| {}),
+            FrameInteraction::Design,
+            &reorder,
+            None,
+        )
+        .into_node();
         let mut runtime = omen::Runtime::new(
             frame_content(
                 tree,
                 &frame,
                 None,
                 Rc::new(|_| {}),
-                Some(&session),
+                FrameInteraction::Interactive(&session),
                 &reorder,
                 None,
             )
@@ -950,8 +987,16 @@ mod tests {
             resize: Rc::new(|_, _| {}),
         };
         let frame = VisualFrame::new(1, Profile::WebDesktop);
-        let content =
-            frame_content(&tree, &frame, Some(1), select.clone(), None, &reorder, None).into_node();
+        let content = frame_content(
+            &tree,
+            &frame,
+            Some(1),
+            select.clone(),
+            FrameInteraction::Design,
+            &reorder,
+            None,
+        )
+        .into_node();
         let omen::ViewKind::Layout(roots) = content.kind else {
             panic!("frame layout");
         };
@@ -978,7 +1023,7 @@ mod tests {
             &frame,
             None,
             select,
-            Some(&InteractivePreview::default()),
+            FrameInteraction::Interactive(&InteractivePreview::default()),
             &reorder,
             None,
         )

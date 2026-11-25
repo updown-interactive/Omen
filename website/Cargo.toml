@@ -11,7 +11,7 @@ edition = "2024"
 [workspace]
 
 [dependencies]
-omen = { path = "/Users/sivasankar/Documents/UpDown/Omen/crates/omen", default-features = false }
+omen = { path = "../crates/omen", default-features = false }
 
 [features]
 default = ["web"]

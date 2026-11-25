@@ -312,11 +312,25 @@ impl TextInput {
                     "up" | "down" => {
                         let up = event.keystroke.key == "up";
                         document.state.update(|state| {
+                            let count = state.completions.len();
                             state.completion_index = if up {
-                                state.completion_index.saturating_sub(1)
+                                (state.completion_index + count - 1) % count
                             } else {
-                                (state.completion_index + 1).min(state.completions.len() - 1)
-                            }
+                                (state.completion_index + 1) % count
+                            };
+                        });
+                        cx.stop_propagation();
+                        return;
+                    }
+                    "pageup" | "pagedown" => {
+                        let up = event.keystroke.key == "pageup";
+                        document.state.update(|state| {
+                            let count = state.completions.len();
+                            state.completion_index = if up {
+                                state.completion_index.saturating_sub(8)
+                            } else {
+                                (state.completion_index + 8).min(count - 1)
+                            };
                         });
                         cx.stop_propagation();
                         return;
@@ -332,6 +346,16 @@ impl TextInput {
                     _ => {}
                 }
             }
+        }
+        if self.code_document.is_some()
+            && event.keystroke.key == "f10"
+            && event.keystroke.modifiers.shift
+            && !event.keystroke.modifiers.secondary()
+            && !event.keystroke.modifiers.alt
+        {
+            self.open_context_menu_at_caret(cx);
+            cx.stop_propagation();
+            return;
         }
         if let Some(document) = &self.code_document {
             let request = match event.keystroke.key.as_str() {
@@ -510,6 +534,14 @@ pub(super) fn prepaint(
     }
     selections.sort_by_key(|range| range.start);
     let cursor = input.cursor_offset();
+    let (search_matches, active_search_match) = input
+        .code_document
+        .as_ref()
+        .map(|document| {
+            let state = document.state.get();
+            (state.search_matches, state.active_search_match)
+        })
+        .unwrap_or_default();
     let brackets = if input.code_document.is_some() {
         input.content.bracket_pair(cursor)
     } else {
@@ -611,6 +643,32 @@ pub(super) fn prepaint(
                     size(px(2.), line_height),
                 ),
                 input.accent,
+            ));
+        }
+        let line_end = start + text.len();
+        for range in search_matches[search_matches.partition_point(|range| range.end < start)..]
+            .iter()
+            .take_while(|range| range.start <= line_end)
+        {
+            if range.is_empty() {
+                continue;
+            }
+            let a = range.start.saturating_sub(start).min(text.len());
+            let b = range.end.saturating_sub(start).min(text.len());
+            if a == b {
+                continue;
+            }
+            let active = active_search_match.as_ref() == Some(range);
+            let highlight = gpui::hsla(0.11, 0.85, 0.55, if active { 0.48 } else { 0.22 });
+            selection.push(fill(
+                Bounds::new(
+                    point(bounds.left() + line.x_for_index(a) - scroll, y),
+                    size(
+                        (line.x_for_index(b) - line.x_for_index(a)).max(px(2.)),
+                        line_height,
+                    ),
+                ),
+                highlight,
             ));
         }
         for range in selections[selections.partition_point(|range| range.end < start)..]

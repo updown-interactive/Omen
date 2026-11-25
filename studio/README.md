@@ -94,10 +94,11 @@ next poll is removed and reports how to select another folder.
 
 External file changes are polled on the worker every 750 ms. Clean documents
 reload automatically. Modified documents retain edits and show a conflict;
-saving refuses to overwrite changed or deleted files. Editor requests carry their
-displayed disk revision and baseline, so a watcher reload racing a queued edit
-cannot silently authorize overwriting the external change. Copy edits before choosing
-**Reload from disk…**, which requires confirmation before discarding them. Save
+normal saves refuse to silently overwrite changed or deleted files. Editor requests
+carry their displayed disk revision and baseline, so a watcher reload racing a queued edit
+cannot silently authorize overwriting the external change. Users can choose
+**Overwrite disk** to force save the editor buffer over external changes, or
+**Reload from disk…** (with confirmation) to discard editor edits. Save
 modified documents before switching projects.
 
 ## Settings

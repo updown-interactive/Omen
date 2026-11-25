@@ -2425,3 +2425,107 @@ fn design_frame_aware_of_project_context_and_platform_priorities() {
     let canvas_admin = app.canvas_settings(&admin_view);
     assert_eq!(canvas_admin.frames[0].profile, Profile::default_desktop());
 }
+
+#[test]
+fn overwrite_resolves_external_conflict_and_saves_buffer_to_disk() {
+    let fixture = Fixture::new();
+    let mut workspace = fixture.workspace();
+    workspace
+        .apply(Command::Edit {
+            path: fixture.file(),
+            content: "studio changes\n".into(),
+        })
+        .unwrap();
+    fs::write(fixture.file(), "external agent edits\n").unwrap();
+    workspace.poll_external().unwrap();
+    assert!(workspace.state.active_document().unwrap().conflict);
+
+    // Normal save fails to prevent accidental clobbering
+    assert!(workspace.save_file(&fixture.file()).is_err());
+
+    // Explicit overwrite succeeds and clears conflict
+    workspace
+        .apply(Command::Overwrite(fixture.file()))
+        .unwrap();
+    assert!(!workspace.state.active_document().unwrap().conflict);
+    assert!(!workspace.state.active_document().unwrap().dirty());
+    assert_eq!(
+        fs::read_to_string(fixture.file()).unwrap(),
+        "studio changes\n"
+    );
+}
+
+#[test]
+fn disk_matching_editor_content_clears_conflict_automatically() {
+    let fixture = Fixture::new();
+    let mut workspace = fixture.workspace();
+    workspace
+        .apply(Command::Edit {
+            path: fixture.file(),
+            content: "shared edits\n".into(),
+        })
+        .unwrap();
+    fs::write(fixture.file(), "temporary divergence\n").unwrap();
+    workspace.poll_external().unwrap();
+    assert!(workspace.state.active_document().unwrap().conflict);
+
+    // Agent outside writes the matching content
+    fs::write(fixture.file(), "shared edits\n").unwrap();
+    workspace.poll_external().unwrap();
+    assert!(!workspace.state.active_document().unwrap().conflict);
+    assert!(!workspace.state.active_document().unwrap().dirty());
+}
+
+#[test]
+fn clean_document_with_same_text_is_not_dirty_and_does_not_conflict_on_external_change() {
+    let fixture = Fixture::new();
+    let mut workspace = fixture.workspace();
+    let original = fs::read_to_string(fixture.file()).unwrap();
+
+    // Edit and revert back to original text
+    workspace
+        .apply(Command::Edit {
+            path: fixture.file(),
+            content: "typed something\n".into(),
+        })
+        .unwrap();
+    assert!(workspace.state.active_document().unwrap().dirty());
+
+    workspace
+        .apply(Command::Edit {
+            path: fixture.file(),
+            content: original.clone(),
+        })
+        .unwrap();
+    assert!(!workspace.state.active_document().unwrap().dirty());
+
+    // External change should reload automatically without conflict
+    fs::write(fixture.file(), "agent updated file\n").unwrap();
+    workspace.poll_external().unwrap();
+    assert!(!workspace.state.active_document().unwrap().conflict);
+    assert_eq!(
+        workspace.state.active_document().unwrap().content,
+        "agent updated file\n"
+    );
+}
+
+#[test]
+fn open_file_reloads_external_changes_on_clean_already_open_document() {
+    let fixture = Fixture::new();
+    let mut workspace = fixture.workspace();
+    assert_eq!(
+        workspace.state.active_document().unwrap().content,
+        "fn main() {\n    println!(\"hello\");\n}\n"
+    );
+
+    // External agent modifies file on disk while tab is already open
+    fs::write(fixture.file(), "fn agent_main() {}\n").unwrap();
+
+    // Re-opening the file syncs the fresh disk content
+    workspace.open_file(&fixture.file()).unwrap();
+    assert_eq!(
+        workspace.state.active_document().unwrap().content,
+        "fn agent_main() {}\n"
+    );
+    assert!(!workspace.state.active_document().unwrap().conflict);
+}

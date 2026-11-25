@@ -395,6 +395,9 @@ fn render_node_with_pin(
     if let Some(scale) = preview.and_then(|preview| preview.scale) {
         settings.scale = scale.clamp(0.1, 2.);
     }
+    if preview.is_some_and(|preview| preview.inert) {
+        settings.inert = true;
+    }
     let scale = settings.scale;
     let px = move |value| gpui::px(value * scale);
     if let Some(theme) = node.style.theme {
@@ -1451,6 +1454,7 @@ fn render_children(
     window: &mut Window,
     cx: &mut App,
 ) -> Div {
+    let px = |value| gpui::px(value * settings.scale);
     let mut pinned = Vec::new();
     for child in children {
         if let ViewKind::Group(children) = &child.kind
@@ -1477,8 +1481,8 @@ fn render_children(
         if let Some(pin) = pin {
             let (trailing, bottom) = pin.corner.edges();
             let right = trailing ^ (settings.direction == omen_core::LayoutDirection::RightToLeft);
-            let x = px(f32::from(pin.x) * settings.scale);
-            let y = px(f32::from(pin.y) * settings.scale);
+            let x = px(f32::from(pin.x));
+            let y = px(f32::from(pin.y));
             let layer = div().absolute().child(child);
             let layer = if right { layer.right(x) } else { layer.left(x) };
             let layer = if bottom {
@@ -2593,9 +2597,17 @@ mod tests {
         assert_eq!(value.get(), "first 👋!\nsecond");
         vcx.simulate_keystrokes("tab");
         assert_eq!(value.get(), "first 👋!\nsecond    ");
-        vcx.simulate_keystrokes("cmd-z");
+        vcx.simulate_keystrokes(if cfg!(target_os = "macos") {
+            "cmd-z"
+        } else {
+            "ctrl-z"
+        });
         assert_eq!(value.get(), "first 👋!\nsecond");
-        vcx.simulate_keystrokes("cmd-shift-z");
+        vcx.simulate_keystrokes(if cfg!(target_os = "macos") {
+            "cmd-shift-z"
+        } else {
+            "ctrl-shift-z"
+        });
         assert_eq!(value.get(), "first 👋!\nsecond    ");
     }
 
@@ -3561,6 +3573,43 @@ mod tests {
             vcx.run_until_parked();
             assert_eq!(count.get(), index + 1);
         }
+    }
+
+    #[gpui::test]
+    fn pinned_element_scales_linearly_with_preview_scale(cx: &mut TestAppContext) {
+        use omen_ui::ViewExt;
+
+        let mut pinned_child = omen_ui::Layout::new().frame(40, 20).into_node();
+        pinned_child.style.pin = Some(omen_core::Pin {
+            corner: omen_core::PinCorner::TopLeading,
+            x: 60,
+            y: 40,
+        });
+        pinned_child.style.preview_mut().placement = Some(omen_core::PreviewPlacement {
+            scope: String::new(),
+            source: 100..120,
+            label: "pinned".into(),
+            draggable: false,
+            axis: None,
+            container: false,
+            drop_from: omen_core::Binding::new(|| (0, omen_core::FlowPlacement::Before), |_| {}),
+        });
+
+        let mut frame_node = omen_ui::Layout::new()
+            .child(pinned_child)
+            .frame(200, 200)
+            .into_node();
+        frame_node.style.preview_mut().scale = Some(0.5);
+        frame_node.style.preview_mut().width = Some(200.);
+
+        let root = omen_ui::Layout::new().child(frame_node).into_node();
+        let (_, vcx) = cx.add_window_view(|_, _| OmenWindow::new(root));
+        vcx.run_until_parked();
+        let bounds = vcx.debug_bounds("studio-placement-100").expect("pinned bounds");
+        assert_eq!(bounds.origin.x, px(30.));
+        assert_eq!(bounds.origin.y, px(20.));
+        assert_eq!(bounds.size.width, px(20.));
+        assert_eq!(bounds.size.height, px(10.));
     }
 }
 

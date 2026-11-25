@@ -33,6 +33,9 @@ impl StudioEnvironment {
             Box::pin(async move {
                 let identity = text.identity();
                 let result = app.inspector_service.inspect(text, cursor).await;
+                if matches!(&result, Err(err) if err.contains("canceled")) {
+                    return;
+                }
                 if app.workspace.get().active_file.as_ref() != Some(&path) {
                     return;
                 }
@@ -43,13 +46,21 @@ impl StudioEnvironment {
                 if state.text.identity() != identity || state.selection.end != cursor {
                     return;
                 }
-                let (node, message) = match result {
-                    Ok(Some(node)) => (Some(node), String::new()),
+                let (node, message, identity) = match result {
+                    Ok(Some(node)) => (Some(node), String::new(), identity),
                     Ok(None) => (
                         None,
                         "Select a component inside view! to inspect its properties.".into(),
+                        identity,
                     ),
-                    Err(message) => (None, message),
+                    Err(message) => {
+                        let prev = app.inspector.get();
+                        if prev.path.as_ref() == Some(&path) && prev.node.is_some() {
+                            (prev.node, message, prev.identity)
+                        } else {
+                            (None, message, identity)
+                        }
+                    }
                 };
                 let revision = app.inspector.get().revision.wrapping_add(1);
                 app.inspector.set(InspectorState {

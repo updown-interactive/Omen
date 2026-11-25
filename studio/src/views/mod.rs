@@ -1,4 +1,4 @@
-use crate::editor::RenameDialog;
+use crate::editor::{GoToLineDialog, RenameDialog};
 use crate::{app::StudioEnvironment, editor::EditorWorkspace};
 use omen::view;
 mod agent;
@@ -22,7 +22,7 @@ mod status;
 use entry::NewEntryDialog;
 mod run;
 mod sidebar;
-use file_palette::CreationPalette;
+use file_palette::{CreationPalette, QuickOpenPalette};
 use inspector::CodeInspector;
 use sidebar::{ACTIVITY_BAR_WIDTH, ActivityBar, Sidebar};
 use status::StudioStatusBar;
@@ -92,6 +92,10 @@ view! {
         .background(colors.surface)
         .color(colors.on_surface)
         .shortcut(if cfg!(target_os = "macos") { "cmd-s" } else { "ctrl-s" }, move || app.save_active())
+        .shortcut(if cfg!(target_os = "macos") { "cmd-w" } else { "ctrl-w" }, move || app.close_active_document())
+        .shortcut("ctrl-tab", move || app.cycle_document(true))
+        .shortcut("ctrl-shift-tab", move || app.cycle_document(false))
+        .shortcut(if cfg!(target_os = "macos") { "cmd-p" } else { "ctrl-p" }, move || app.open_quick_open())
         .shortcut(if cfg!(target_os = "macos") { "cmd-b" } else { "ctrl-b" }, move || app.update_layout(|layout| layout.sidebar_visible = !layout.sidebar_visible))
         .shortcut(if cfg!(target_os="macos") {"cmd-shift-e"} else {"ctrl-shift-e"}, move || app.select_sidebar(crate::state::SidebarPane::Explorer))
         .shortcut(if cfg!(target_os="macos") {"cmd-shift-f"} else {"ctrl-shift-f"}, move || app.select_sidebar(crate::state::SidebarPane::Search))
@@ -103,6 +107,8 @@ view! {
         .shortcut(if cfg!(target_os="macos") {"cmd-alt-3"} else {"ctrl-alt-3"}, move || app.set_visual_mode(crate::visual::EditorMode::Split))
         .context_menu($app.context_visible, move || menu::panel(view! { ContextMenu() }))
         .dialog($app.rename_visible, move || view! { RenameDialog() })
+        .dialog($app.goto_visible, move || view! { GoToLineDialog() })
+        .dialog($app.quick_open_visible, move || view! { QuickOpenPalette() })
         .dialog($app.reload_visible, move || view! { ConfirmReload() })
         .dialog($app.creation_visible, move || view! { ProjectCreator() })
         .dialog(app.entry_dialog_visibility(), move || view! { NewEntryDialog() })

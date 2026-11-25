@@ -91,6 +91,7 @@ pub enum Command {
     Select(PathBuf),
     Save(PathBuf),
     SaveAll,
+    Overwrite(PathBuf),
     Reload(PathBuf),
     Close(PathBuf),
     Refresh,
@@ -306,8 +307,12 @@ impl Workspace {
                     return Err(io::Error::other("Document exceeds the editor size limit"));
                 }
                 let document = self.document_mut(&path)?;
-                document.content = content;
-                if disk_revision != document.disk_revision {
+                document.content = if document.baseline == content {
+                    document.baseline.clone()
+                } else {
+                    content
+                };
+                if disk_revision != document.disk_revision && document.dirty() {
                     document.baseline = baseline;
                     document.conflict = true;
                 }
@@ -370,6 +375,7 @@ impl Workspace {
                     self.save_file(&path)?;
                 }
             }
+            Command::Overwrite(path) => self.force_save_file(&path)?,
             Command::Reload(path) => {
                 let disk = self.read_file(&path)?;
                 let document = self.document_mut(&path)?;
@@ -488,18 +494,31 @@ impl Workspace {
 
     pub fn open_file(&mut self, path: &Path) -> io::Result<()> {
         let path = self.project_path(path)?;
-        if !self
+        let disk = self.read_file(&path);
+        if let Some(document) = self
             .state
             .documents
-            .iter()
-            .any(|document| document.path == path)
+            .iter_mut()
+            .find(|document| document.path == path)
         {
+            if let Ok(disk) = disk {
+                if disk == document.content {
+                    document.baseline = document.content.clone();
+                    document.conflict = false;
+                } else if !document.dirty() {
+                    document.content = disk.into();
+                    document.baseline = document.content.clone();
+                    document.disk_revision = document.disk_revision.wrapping_add(1);
+                    document.conflict = false;
+                }
+            }
+        } else {
             if self.state.documents.len() >= MAX_DOCUMENTS {
                 return Err(io::Error::other(
                     "Close a tab before opening more than 32 documents",
                 ));
             }
-            let content: omen::TextSnapshot = self.read_file(&path)?.into();
+            let content: omen::TextSnapshot = disk?.into();
             self.state.documents.push(Document {
                 path: path.clone(),
                 baseline: content.clone(),
@@ -523,14 +542,28 @@ impl Workspace {
     pub fn save_file(&mut self, path: &Path) -> io::Result<()> {
         let disk = self.read_file(path)?;
         let document = self.document_mut(path)?;
+        if disk == document.content {
+            document.baseline = document.content.clone();
+            document.conflict = false;
+            return Ok(());
+        }
         if disk != document.baseline {
             document.conflict = true;
             return Err(io::Error::other(
-                "File changed on disk. Copy your edits before reloading; saving will not overwrite external changes",
+                "File changed on disk. Choose 'Overwrite disk' to save or 'Reload from disk' to discard external edits",
             ));
         }
         services::atomic_write(path, document.content.to_string().as_bytes())?;
         document.baseline = document.content.clone();
+        document.conflict = false;
+        Ok(())
+    }
+
+    pub fn force_save_file(&mut self, path: &Path) -> io::Result<()> {
+        let document = self.document_mut(path)?;
+        services::atomic_write(path, document.content.to_string().as_bytes())?;
+        document.baseline = document.content.clone();
+        document.disk_revision = document.disk_revision.wrapping_add(1);
         document.conflict = false;
         Ok(())
     }
@@ -541,6 +574,13 @@ impl Workspace {
             let disk = self.read_file(&self.state.documents[index].path);
             let document = &mut self.state.documents[index];
             match disk {
+                Ok(disk) if disk == document.content => {
+                    if document.conflict || document.baseline != document.content {
+                        document.baseline = document.content.clone();
+                        document.conflict = false;
+                        changed = true;
+                    }
+                }
                 Ok(disk) if disk != document.baseline => {
                     if document.dirty() {
                         if !document.conflict {

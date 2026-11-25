@@ -42,6 +42,80 @@ impl StudioEnvironment {
             }
         });
     }
+    pub fn open_quick_open(&self) {
+        self.context_visible.set(false);
+        self.palette_visible.set(false);
+        self.quick_open_query.set(String::new());
+        self.quick_open_index.set(0);
+        let open_docs: Vec<PathBuf> = self
+            .workspace
+            .get()
+            .documents
+            .into_iter()
+            .map(|doc| doc.path)
+            .collect();
+        self.quick_open_files.set(open_docs);
+        self.quick_open_visible.set(true);
+        self.quick_open_focus.set(true);
+    }
+    pub async fn load_quick_open_files(&self) {
+        let Some(root) = self.workspace.get().root else {
+            return;
+        };
+        if let Ok(files) =
+            crate::services::project_tools::background(move || {
+                crate::services::project_tools::list_files(root)
+            })
+            .await
+        {
+            self.quick_open_files.set(files);
+        }
+    }
+    fn filtered_quick_open_files(&self) -> Vec<PathBuf> {
+        let query = self.quick_open_query.get().trim().to_lowercase();
+        let root = self.workspace.get().root;
+        self.quick_open_files
+            .get()
+            .into_iter()
+            .filter(|path| {
+                if query.is_empty() {
+                    return true;
+                }
+                let display = root
+                    .as_ref()
+                    .and_then(|root| path.strip_prefix(root).ok())
+                    .unwrap_or(path)
+                    .to_string_lossy()
+                    .to_lowercase();
+                display.contains(&query)
+            })
+            .take(100)
+            .collect()
+    }
+    pub fn quick_open_move(&self, forward: bool) {
+        let count = self.filtered_quick_open_files().len();
+        if count == 0 {
+            return;
+        }
+        self.quick_open_index.update(|index| {
+            *index = if forward {
+                (*index + 1) % count
+            } else {
+                (*index + count - 1) % count
+            };
+        });
+    }
+    pub fn activate_quick_open(&self) {
+        if let Some(path) = self
+            .filtered_quick_open_files()
+            .get(self.quick_open_index.get())
+            .cloned()
+        {
+            self.quick_open_visible.set(false);
+            self.quick_open_focus.set(false);
+            self.send(Command::OpenFile(path));
+        }
+    }
     pub fn activate_palette(&self) {
         let query = self.palette_query.get().to_lowercase();
         if let Some(kind) = crate::workspace::file_kind::StudioFileKind::CREATABLE

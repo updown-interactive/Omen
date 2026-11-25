@@ -57,13 +57,27 @@ view! {
     }
 }
 view! {
+    SearchRunner {
+        @Environment app: StudioEnvironment
+        let runner = app.clone();
+        Layout {}.frame(0, 0).task(move || {
+            let app = runner.clone();
+            async move { app.search_project().await; }
+        })
+    }
+
     ProjectSearch {
         @Environment app: StudioEnvironment
         let colors = app.colors();
         let root = (app.workspace).root;
         let result = app.search_results;
+        let selected_index = app.search_index;
         let current = result.root == root && result.query == app.search_query && result.case_sensitive == app.search_case_sensitive;
+        let nonce = app.search_nonce;
         Layout {
+            if nonce > 0 {
+                SearchRunner().key(format!("search-run:{nonce}"))
+            }
             Text("Search")
                 .fontSize(13)
                 .weight(.semibold)
@@ -77,6 +91,7 @@ view! {
             .padding(1)
             .background(colors.outline)
             .cornerRadius(6)
+            .shortcut("enter", move || app.trigger_project_search())
             Checkbox("Match case", $app.search_case_sensitive)
                 .fontSize(11)
             Button(if app.search_busy { "Searching…" } else { "Search files" }) async { app.search_project().await; }
@@ -94,13 +109,13 @@ view! {
                     .font(.caption)
                     .color(colors.on_surface_variant)
                 List(
-                    result.matches,
-                    id: |item| format!("{}:{}",item.path.display(),item.line)
-                ) { item in SearchResultRow(item: item) }
+                    result.matches.iter().cloned().enumerate().collect::<Vec<_>>(),
+                    id: |(index, item)| format!("{index}:{}:{}",item.path.display(),item.line)
+                ) { (index, item) in SearchResultRow(item: item, selected: index == selected_index) }
                 .virtualized(54.)
                 .fill()
                 .frame(.infinity,.infinity)
-            } else { Text("Enter text and choose Search files.")
+            } else { Text("Enter text and press Enter or Search files.")
                         .font(.caption)
                         .color(colors.on_surface_variant) }
         }
@@ -108,12 +123,16 @@ view! {
         .spacing(10)
         .fill()
         .frame(.infinity,.infinity)
+        .focusScope(true)
         .background(colors.surface_container)
         .color(colors.on_surface)
+        .shortcut("down", move || app.search_move(1))
+        .shortcut("up", move || app.search_move(-1))
+        .shortcut("enter", move || app.activate_search_result())
     }
 }
 view! {
-    SearchResultRow(item: SearchMatch) {
+    SearchResultRow(item: SearchMatch, selected: bool) {
         @Environment app: StudioEnvironment
         let colors = app.colors();
         let root = (app.workspace).root;
@@ -132,6 +151,7 @@ view! {
         .spacing(3)
         .padding(5)
         .frame(.infinity,54)
+        .background(if selected { colors.selection } else { colors.surface_container })
         .hoverBackground(colors.selection)
         .onTap(move || app.open_search_result(item.clone()))
         .accessibilityRole(.button)

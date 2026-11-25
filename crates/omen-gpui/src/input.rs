@@ -357,7 +357,7 @@ impl TextInput {
                 self.content.slice(prev..offset),
                 self.content.slice(offset..next)
             );
-            if matches!(pair.as_str(), "()" | "[]" | "{}") {
+            if matches!(pair.as_str(), "()" | "[]" | "{}" | "\"\"") {
                 self.replace_text_in_range(
                     Some(self.range_to_utf16(&(prev..next))),
                     "",
